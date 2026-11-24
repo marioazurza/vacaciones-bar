@@ -1,7 +1,7 @@
 import { useState } from 'preact/hooks';
 import {
   MONTHS, WEEKDAYS, WEEKDAYS_SHORT, dateFromIndex, dayIndex, daysInMonth, dow, formatDate, formatRange,
-  periodLength, addDays, weekStart,
+  periodLength, addDays, weekStart, diffDays, formatShort,
 } from '../shared/dates.js';
 import { GROUPS, colorClass, groupLabel, SHIFTS, TEAMS } from '../shared/rules.js';
 import { Modal, GroupDot, Alert } from './ui.jsx';
@@ -93,28 +93,34 @@ export function YearView({ cal, filters, onDay, onMonth }) {
   );
 }
 
-// ---------- Vista mensual (filas por trabajador) ----------
-export function MonthView({ cal, filters, month, onDay, onBar, onPick, previewIds, fixedLength = 0 }) {
+// ---------- Línea de tiempo (filas por trabajador, barras continuas) ----------
+// La usan la vista mensual y la semanal: cada periodo de vacaciones es una sola barra
+// que ocupa todos sus días.
+function TimelineView({ cal, filters, from, n, title, wide, onDay, onBar, onPick, previewIds, fixedLength = 0 }) {
   const [sel, setSel] = useState(null);
-  const n = daysInMonth(cal.year, month);
-  const first = `${cal.year}-${String(month + 1).padStart(2, '0')}-01`;
-  const last = addDays(first, n - 1);
-  const i0 = dayIndex(first, cal.year);
+  const last = addDays(from, n - 1);
+  const yStart = `${cal.year}-01-01`, yEnd = `${cal.year}-12-31`;
+  const inYear = (d) => d >= yStart && d <= yEnd;
+  const days = Array.from({ length: n }, (_, k) => addDays(from, k));
   const staff = applyFilters(cal.staff, filters);
-  const cols = `minmax(150px, 190px) repeat(${n}, minmax(32px, 1fr))`;
+  const cols = wide ? `minmax(140px, 190px) repeat(${n}, minmax(96px, 1fr))` : `minmax(150px, 190px) repeat(${n}, minmax(32px, 1fr))`;
+  const col = (date) => 2 + diffDays(from, date);
   let row = 2;
   const items = [];
-  const dayCol = (date) => 2 + (Number(date.slice(8, 10)) - 1);
 
-  items.push(<div class="g-name" style={{ gridRow: 1, gridColumn: 1, zIndex: 4 }} key="hn"><b>{MONTHS[month]} {cal.year}</b></div>);
-  for (let d = 0; d < n; d++) {
-    const date = dateFromIndex(cal.year, i0 + d);
+  items.push(<div class="g-name" style={{ gridRow: 1, gridColumn: 1, zIndex: 4 }} key="hn"><b>{title}</b></div>);
+  days.forEach((date, d) => {
     items.push(
-      <div key={`h${d}`} class={`g-head ${dow(date) >= 4 ? 'we' : ''} ${date === cal.today ? 'today' : ''}`} style={{ gridRow: 1, gridColumn: 2 + d }} onClick={() => onDay(date)}>
-        {WEEKDAYS_SHORT[dow(date)]}<b>{d + 1}</b>
+      <div key={`h${d}`} class={`g-head ${dow(date) >= 4 ? 'we' : ''} ${date === cal.today ? 'today' : ''}`} style={{ gridRow: 1, gridColumn: 2 + d }} onClick={() => inYear(date) && onDay(date)}>
+        {wide ? WEEKDAYS[dow(date)] : WEEKDAYS_SHORT[dow(date)]}<b>{Number(date.slice(8, 10))}</b>
       </div>,
     );
-  }
+  });
+
+  const bar = (key, r, a, b, cls, label, tip, onClick) => {
+    const aa = a < from ? from : a, bb = b > last ? last : b;
+    items.push(<div key={key} class={cls} style={{ gridRow: r, gridColumn: `${col(aa)} / ${col(bb) + 1}` }} title={tip} onClick={onClick}>{label}</div>);
+  };
 
   for (const g of GROUPS) {
     const members = staff.filter((s) => s.team === g.team && s.shift === g.shift);
@@ -124,98 +130,64 @@ export function MonthView({ cal, filters, month, onDay, onBar, onPick, previewId
     for (const s of members) {
       const r = row++;
       items.push(<div class="g-name" style={{ gridRow: r, gridColumn: 1 }} key={`n${s.worker_id}`} title={s.name}><span class={`dot ${colorClass(s.team, s.shift)}`} />{s.name}</div>);
-      for (let d = 0; d < n; d++) {
-        const i = i0 + d;
-        const date = dateFromIndex(cal.year, i);
+      days.forEach((date, d) => {
+        const ok = inYear(date);
+        const i = ok ? dayIndex(date, cal.year) : -1;
         const isSel = sel && sel.worker_id === s.worker_id && sel.date === date;
+        const pick = onPick && ok;
         items.push(
-          <div key={`c${s.worker_id}-${d}`} class={`g-cell ${dow(date) >= 4 ? 'we' : ''} ${cal.analysis.blockedDay[i] ? 'blocked' : ''} ${onPick ? 'pick' : ''} ${isSel ? 'sel' : ''}`}
+          <div key={`c${s.worker_id}-${d}`} class={`g-cell ${dow(date) >= 4 ? 'we' : ''} ${ok && cal.analysis.blockedDay[i] ? 'blocked' : ''} ${pick ? 'pick' : ''} ${isSel ? 'sel' : ''}`}
             style={{ gridRow: r, gridColumn: 2 + d }}
-            title={onPick ? (sel ? 'Haz clic en el último día del periodo' : 'Haz clic en el primer día del periodo') : ''}
-            onClick={onPick ? () => {
+            title={pick ? (fixedLength || !sel ? 'Haz clic en el primer día del periodo' : 'Haz clic en el último día del periodo') : ''}
+            onClick={pick ? () => {
               if (fixedLength) { onPick(s.worker_id, date, addDays(date, fixedLength - 1)); return; }
               if (!sel || sel.worker_id !== s.worker_id) setSel({ worker_id: s.worker_id, date });
               else { const a = sel.date < date ? sel.date : date, b = sel.date < date ? date : sel.date; setSel(null); onPick(s.worker_id, a, b); }
             } : null} />,
         );
-      }
+      });
       for (const v of cal.vacations) {
-        if (v.worker_id !== s.worker_id || v.end < first || v.start > last) continue;
-        const a = v.start < first ? first : v.start, b = v.end > last ? last : v.end;
+        if (v.worker_id !== s.worker_id || v.end < from || v.start > last) continue;
         const len = periodLength(v.start, v.end);
-        const preview = previewIds?.has(v.id);
-        items.push(
-          <div key={`v${v.id}`} class={`g-bar ${colorClass(s.team, s.shift)} ${preview ? 'preview' : ''} ${onBar ? '' : 'ro'}`}
-            style={{ gridRow: r, gridColumn: `${dayCol(a)} / ${dayCol(b) + 1}` }}
-            title={`${s.name}: ${formatRange(v.start, v.end)} (${len} días)`}
-            onClick={onBar ? (e) => { e.stopPropagation(); onBar(v); } : null}>
-            {s.first_name} · {len}d
-          </div>,
-        );
+        const label = wide ? `🌴 ${s.first_name} · ${formatRange(v.start, v.end)} (${len} días)` : `${s.first_name} · ${len}d`;
+        bar(`v${v.id}`, r, v.start, v.end, `g-bar ${colorClass(s.team, s.shift)} ${previewIds?.has(v.id) ? 'preview' : ''} ${onBar ? '' : 'ro'}`,
+          label, `${s.name}: ${formatRange(v.start, v.end)} (${len} días)`, onBar ? (e) => { e.stopPropagation(); onBar(v); } : null);
       }
     }
-    const subs = cal.reinforcements.filter((x) => x.team === g.team && x.shift === g.shift && x.start <= last && x.end >= first);
+    const subs = cal.reinforcements.filter((x) => x.team === g.team && x.shift === g.shift && x.start <= last && x.end >= from);
     if (subs.length) {
       const r = row++;
       items.push(<div class="g-name muted" style={{ gridRow: r, gridColumn: 1 }} key={`sn${g.key}`}>Suplentes</div>);
-      for (let d = 0; d < n; d++) items.push(<div key={`sc${g.key}${d}`} class="g-cell" style={{ gridRow: r, gridColumn: 2 + d }} />);
-      subs.forEach((x, k) => {
-        const a = x.start < first ? first : x.start, b = x.end > last ? last : x.end;
-        items.push(<div key={`s${g.key}${k}`} class={`g-bar sub ${colorClass(g.team, g.shift)}`} style={{ gridRow: r, gridColumn: `${dayCol(a)} / ${dayCol(b) + 1}` }} title={`${x.note || 'Suplente'}: ${formatRange(x.start, x.end)}`}>{x.note || 'Suplente'}</div>);
-      });
+      days.forEach((_, d) => items.push(<div key={`sc${g.key}${d}`} class="g-cell" style={{ gridRow: r, gridColumn: 2 + d }} />));
+      subs.forEach((x, k) => bar(`s${g.key}${k}`, r, x.start, x.end, `g-bar sub ${colorClass(g.team, g.shift)}`, wide ? `${x.note || 'Suplente'} · ${formatRange(x.start, x.end)}` : (x.note || 'Suplente'), `${x.note || 'Suplente'}: ${formatRange(x.start, x.end)}`, null));
     }
     const r = row++;
-    items.push(<div class="g-name small muted" style={{ gridRow: r, gridColumn: 1 }} key={`cv${g.key}`}>Disponibles / mínimo</div>);
-    for (let d = 0; d < n; d++) {
-      const i = i0 + d;
+    items.push(<div class="g-name small muted" style={{ gridRow: r, gridColumn: 1 }} key={`cv${g.key}`}>{wide ? 'Trabajando / mínimo' : 'Disponibles / mínimo'}</div>);
+    days.forEach((date, d) => {
+      if (!inYear(date)) { items.push(<div key={`cv${g.key}${d}`} class="g-cov" style={{ gridRow: r, gridColumn: 2 + d }} />); return; }
+      const i = dayIndex(date, cal.year);
       const cls = G.deficit[i] > 0 ? 'bad' : G.available[i] === G.need[i] && G.off[i].length ? 'full' : 'ok';
-      items.push(<div key={`cv${g.key}${d}`} class={`g-cov ${cls}`} style={{ gridRow: r, gridColumn: 2 + d }} onClick={() => onDay(dateFromIndex(cal.year, i))} title="Ver el día">{G.available[i]}/{G.need[i]}</div>);
-    }
+      items.push(<div key={`cv${g.key}${d}`} class={`g-cov ${cls}`} style={{ gridRow: r, gridColumn: 2 + d }} onClick={() => onDay(date)} title="Ver el día">{wide ? `${G.available[i]} de ${G.need[i]}` : `${G.available[i]}/${G.need[i]}`}</div>);
+    });
   }
   if (!staff.length) return <div class="card empty">No hay trabajadores con estos filtros.</div>;
   return (
     <div class="stack">
       {onPick && <div class="small muted">{fixedLength ? `Para añadir vacaciones, haz clic en el primer día en la fila del trabajador (se cogen ${fixedLength} días seguidos). Haz clic en una barra para editarla.` : sel ? `Primer día: ${formatDate(sel.date)}. Ahora haz clic en el último día del periodo en la misma fila.` : 'Para añadir vacaciones, haz clic en el primer y el último día en la fila del trabajador. Haz clic en una barra para editarla.'}</div>}
-      <div class="gantt-wrap"><div class="gantt" style={{ gridTemplateColumns: cols }}>{items}</div></div>
+      <div class="gantt-wrap"><div class={`gantt ${wide ? 'wide' : ''}`} style={{ gridTemplateColumns: cols }}>{items}</div></div>
     </div>
   );
 }
 
+// ---------- Vista mensual ----------
+export function MonthView({ cal, month, ...rest }) {
+  const from = `${cal.year}-${String(month + 1).padStart(2, '0')}-01`;
+  return <TimelineView cal={cal} from={from} n={daysInMonth(cal.year, month)} title={`${MONTHS[month]} ${cal.year}`} {...rest} />;
+}
+
 // ---------- Vista semanal ----------
-export function WeekView({ cal, filters, start, onDay }) {
-  const staff = applyFilters(cal.staff, filters);
-  const visible = new Set(staff.map((s) => s.worker_id));
-  const days = Array.from({ length: 7 }, (_, k) => addDays(start, k));
-  return (
-    <div class="gantt-wrap">
-      <div class="week">
-        <div class="wh" />
-        {days.map((d) => <div key={d} class={`wh ${dow(d) >= 4 ? 'we' : ''}`} onClick={() => d.startsWith(String(cal.year)) && onDay(d)}>{WEEKDAYS[dow(d)]}<div class="small muted">{formatDate(d)}</div></div>)}
-        {GROUPS.filter((g) => staff.some((s) => s.team === g.team && s.shift === g.shift)).map((g) => {
-          const G = cal.analysis.groups[g.key];
-          return [
-            <div class="wg" key={g.key}><GroupDot team={g.team} shift={g.shift} />{groupLabel(g.team, g.shift)}</div>,
-            ...days.map((d) => {
-              if (!d.startsWith(String(cal.year))) return <div key={g.key + d} class="wc muted">Otro año</div>;
-              const i = dayIndex(d, cal.year);
-              const off = new Set(G.off[i]);
-              const extra = G.extra[i];
-              return (
-                <div key={g.key + d} class={`wc ${G.deficit[i] ? 'bad' : ''}`}>
-                  <span class={`badge ${G.deficit[i] ? 'bad' : G.available[i] === G.need[i] && off.size ? 'warn' : 'ok'}`}>{G.available[i]} de {G.need[i]} necesarios</span>
-                  {G.members.filter((id) => visible.has(id)).map((id) => {
-                    const s = cal.staffById.get(id);
-                    return <span key={id} class={`chip ${colorClass(g.team, g.shift)} ${off.has(id) ? 'off' : ''}`} title={off.has(id) ? 'De vacaciones' : 'Trabajando'}>{off.has(id) ? '🌴 ' : ''}{s.first_name}</span>;
-                  })}
-                  {extra > 0 && <span class={`chip sub ${colorClass(g.team, g.shift)}`}>+{extra} suplente</span>}
-                </div>
-              );
-            }),
-          ];
-        })}
-      </div>
-    </div>
-  );
+export function WeekView({ cal, start, ...rest }) {
+  return <TimelineView cal={cal} from={start} n={7} wide title={`Semana del ${formatShort(start)}`} {...rest} />;
 }
 
 // ---------- Detalle de un día ----------

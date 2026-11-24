@@ -51,7 +51,9 @@ export function CalendarPage({ data, reload, isAdmin, me }) {
       {view === 'month' && <MonthView cal={cal} filters={filters} month={m} onDay={setDay}
         onBar={isAdmin ? (v) => setEdit(v) : null}
         onPick={isAdmin ? (worker_id, start, end) => setEdit({ worker_id, start, end }) : null} fixedLength={data.periodRules?.periodLength || 0} />}
-      {view === 'week' && <WeekView cal={cal} filters={filters} start={wk} onDay={setDay} />}
+      {view === 'week' && <WeekView cal={cal} filters={filters} start={wk} onDay={setDay}
+        onBar={isAdmin ? (v) => setEdit(v) : null}
+        onPick={isAdmin ? (worker_id, start, end) => setEdit({ worker_id, start, end }) : null} fixedLength={data.periodRules?.periodLength || 0} />}
       {day && <DayModal cal={cal} date={day} onClose={() => setDay(null)} canEdit={isAdmin} onAdd={(d) => { setDay(null); setEdit({ start: d, end: d }); }} />}
       {edit && <VacationModal data={data} initial={edit} onClose={() => setEdit(null)} onDone={reload} />}
     </>
