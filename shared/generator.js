@@ -16,6 +16,8 @@ export const DEFAULT_GENERATOR_SETTINGS = {
   split: [15, 10, 5], // reparto deseado de los días en periodos (si no hay duración fija)
   substitutes: { enabled: true, length: 14 }, // suplentes de cocina para un periodo seguido
   iterations: 40,
+  strategy: 'rotacion', // 'rotacion' (uno detrás de otro en cada turno) | 'equilibrado'
+  rotation: { start: null, spread: false, order: {} },
 };
 
 function rng(seed) {
@@ -273,4 +275,67 @@ export function generateProposal(ctx, opts = {}) {
       return sc;
     }
   }
+}
+
+/**
+ * Rotación por turnos: en cada turno (equipo + turno) los trabajadores cogen sus periodos
+ * uno detrás de otro, sin huecos. Cuando acaba uno empieza el siguiente.
+ * opts: { periodLength, start:'AAAA-MM-DD', spread:boolean, order:{ 'sala-M':[ids] }, notBefore }
+ *  - spread=false: las rondas van seguidas (ronda 1 y a continuación ronda 2).
+ *  - spread=true: cada ronda empieza en una parte distinta del año (p. ej. enero y julio).
+ */
+export function generateRotation(ctx, opts = {}) {
+  const year = ctx.year;
+  const N = daysInYear(year);
+  const L = Number(opts.periodLength) || 15;
+  const base = analyze({ ...ctx, vacations: [] });
+  let start = opts.start && opts.start.startsWith(String(year)) ? opts.start : firstMonday(year);
+  if (opts.notBefore && opts.notBefore > start) start = opts.notBefore;
+  const s0 = dayIndex(start, year);
+  const blocked = base.blockedDay.map((b) => !!b);
+  const vacations = [];
+  const unassigned = {};
+
+  const groups = {};
+  for (const s of ctx.staff) (groups[groupKey(s.team, s.shift)] ||= []).push(s);
+  for (const [key, members] of Object.entries(groups)) {
+    const wanted = opts.order?.[key] || [];
+    const ordered = [...members].sort((a, b) => {
+      const ia = wanted.indexOf(a.worker_id), ib = wanted.indexOf(b.worker_id);
+      return (ia < 0 ? 999 : ia) - (ib < 0 ? 999 : ib) || a.name.localeCompare(b.name);
+    });
+    const rounds = Math.max(...ordered.map((m) => Math.floor((m.days ?? 30) / L)), 0);
+    let cursor = s0;
+    for (let r = 0; r < rounds; r++) {
+      if (opts.spread && r > 0) {
+        let c = Math.max(cursor, s0 + Math.round((r * (N - s0)) / rounds));
+        while (c < N && dow(dateFromIndex(year, c)) !== 0) c++; // empezar en lunes
+        cursor = c;
+      }
+      for (const m of ordered) {
+        if (Math.floor((m.days ?? 30) / L) <= r) continue;
+        // Saltar fechas bloqueadas
+        let tries = 0;
+        while (tries++ < N) {
+          let hit = -1;
+          for (let i = cursor; i < cursor + L && i < N; i++) if (blocked[i]) { hit = i; break; }
+          if (hit < 0) break;
+          cursor = hit + 1;
+        }
+        if (cursor + L > N) { unassigned[m.worker_id] = (unassigned[m.worker_id] || 0) + L; continue; }
+        vacations.push({ worker_id: m.worker_id, start: dateFromIndex(year, cursor), end: dateFromIndex(year, cursor + L - 1) });
+        cursor += L;
+      }
+    }
+  }
+  const final = analyze({ ...ctx, vacations: vacations.map((v, i) => ({ ...v, id: -1 - i })) });
+  const monthLoad = new Array(12).fill(0);
+  for (const v of vacations) for (let i = dayIndex(v.start, year); i <= dayIndex(v.end, year); i++) monthLoad[month(dateFromIndex(year, i))]++;
+  return { vacations, reinforcements: [], unassigned, issues: final.issues, monthLoad, start };
+}
+
+function firstMonday(year) {
+  let d = `${year}-01-01`;
+  for (let i = 0; i < 7; i++) { const x = dateFromIndex(year, i); if (dow(x) === 0) { d = x; break; } }
+  return d;
 }

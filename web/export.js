@@ -7,11 +7,17 @@ import { GROUPS, groupLabel, workerStats } from '../shared/rules.js';
 import { buildCal } from './model.js';
 
 const COLORS = {
+  'cocina-M': { strong: 'E0703A', soft: 'FBE3D5' },
+  'cocina-T': { strong: '3F63D6', soft: 'DFE6FB' },
+  'sala-M': { strong: 'D39A12', soft: 'FAEFD2' },
+  'sala-T': { strong: '8A5CD6', soft: 'ECE3FB' },
+};
+const OLD_COLORS = {
   cocina: { strong: 'E07B46', soft: 'FBD5BF' },
   'sala-M': { strong: '3B8FD4', soft: 'BFDDF5' },
   'sala-T': { strong: '8566D4', soft: 'D9CDF6' },
 };
-const colorOf = (s) => (s.team === 'cocina' ? COLORS.cocina : COLORS[`sala-${s.shift}`]);
+const colorOf = (s) => COLORS[`${s.team}-${s.shift}`] || OLD_COLORS.cocina;
 const hexToRgb = (h) => [parseInt(h.slice(0, 2), 16), parseInt(h.slice(2, 4), 16), parseInt(h.slice(4, 6), 16)];
 
 function download(blob, name) {

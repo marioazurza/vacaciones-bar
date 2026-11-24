@@ -8,10 +8,11 @@ import {
 
 export const TEAMS = { cocina: 'Cocina', sala: 'Camareros' };
 export const SHIFTS = { M: 'Mañana', T: 'Tarde' };
+// Ordenados por turno: primero todo el turno de mañana, después el de tarde.
 export const GROUPS = [
   { key: 'cocina-M', team: 'cocina', shift: 'M' },
-  { key: 'cocina-T', team: 'cocina', shift: 'T' },
   { key: 'sala-M', team: 'sala', shift: 'M' },
+  { key: 'cocina-T', team: 'cocina', shift: 'T' },
   { key: 'sala-T', team: 'sala', shift: 'T' },
 ];
 
@@ -43,7 +44,7 @@ export function groupLabel(team, shift) {
 
 /** Clase de color: cocina, camareros de mañana, camareros de tarde. */
 export function colorClass(team, shift) {
-  return team === 'cocina' ? 'c-cocina' : shift === 'M' ? 'c-sala-m' : 'c-sala-t';
+  return `c-${team}-${shift === 'M' ? 'm' : 't'}`;
 }
 
 export function normalizeMinimums(m) {

@@ -22,6 +22,7 @@ function setup({ periodLength = 0, legacy = true } = {}) {
     // Reglas originales: mínimos por día de la semana y sin máximo por turno.
     service.call(admin, 'saveMinimums', { minimums: DEFAULT_MINIMUMS });
     service.call(admin, 'savePeriodRules', { maxOffPerShift: null });
+    service.call(admin, 'saveGeneratorSettings', { settings: { strategy: 'equilibrado' } });
   }
   return { repo, service, admin, login };
 }
@@ -157,8 +158,27 @@ test('regla actual: 15 días seguidos y máximo 1 de vacaciones a la vez por tur
   assert.match(e.message, /mismo turno/);
   // Otro turno sí puede coincidir, y un cocinero puede librar en fin de semana
   service.call(admin, 'saveVacation', { year: 2027, worker_id: cook.worker_id, start: '2027-03-01', end: '2027-03-15' });
+  service.call(admin, 'saveGeneratorSettings', { settings: { strategy: 'equilibrado' } });
   const prop = service.call(admin, 'generate', { year: 2027 });
   assert.equal(prop.issues.length, 0);
   assert.deepEqual(prop.unassigned, {});
   assert.equal(prop.reinforcements.length, 0);
+});
+
+test('rotación: en cada turno, uno detrás de otro sin huecos', () => {
+  const { service, admin } = setup({ periodLength: 15, legacy: false });
+  for (const spread of [false, true]) {
+    service.call(admin, 'saveGeneratorSettings', { settings: { strategy: 'rotacion', rotation: { start: '2027-01-04', spread } } });
+    const prop = service.call(admin, 'generate', { year: 2027 });
+    assert.equal(prop.issues.length, 0);
+    assert.deepEqual(prop.unassigned, {});
+    assert.equal(prop.vacations.length, 24);
+    const d = service.call(admin, 'getYear', { year: 2027 });
+    const salaM = d.staff.filter((s) => s.team === 'sala' && s.shift === 'M').map((s) => s.worker_id);
+    const chain = prop.vacations.filter((v) => salaM.includes(v.worker_id)).sort((a, b) => (a.start < b.start ? -1 : 1));
+    assert.equal(chain[0].start, '2027-01-04');
+    for (let i = 1; i < 4; i++) assert.equal(Date.parse(chain[i].start) - Date.parse(chain[i - 1].end), 864e5);
+    if (!spread) assert.equal(Date.parse(chain[4].start) - Date.parse(chain[3].end), 864e5);
+    service.call(admin, 'applyProposal', { year: 2027, vacations: prop.vacations, replace: true });
+  }
 });

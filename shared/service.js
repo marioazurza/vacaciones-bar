@@ -9,8 +9,8 @@ import {
   DEFAULT_MINIMUMS, DEFAULT_ANNUAL_DAYS, DEFAULT_MAX_OFF_PER_SHIFT, NO_MINIMUMS, TEAMS, SHIFTS, analyze, newIssues, describeIssue,
   checkPeriodShape, normalizeMinimums, groupLabel,
 } from './rules.js';
-import { generateProposal, DEFAULT_GENERATOR_SETTINGS } from './generator.js';
-import { formatRange, overlaps, periodLength, todayISO, isISODate } from './dates.js';
+import { generateProposal, generateRotation, DEFAULT_GENERATOR_SETTINGS } from './generator.js';
+import { formatRange, overlaps, periodLength, todayISO, isISODate, addDays } from './dates.js';
 
 export const DEFAULT_PERIOD_RULES = { periodLength: 15, maxOffPerShift: DEFAULT_MAX_OFF_PER_SHIFT };
 
@@ -393,6 +393,10 @@ export function createService({ repo, hashPassword, verifyPassword, randomToken,
       const ctx = ctxFor(year);
       const gs = { ...generatorSettings(), ...(settings || {}) };
       const notBefore = today() > `${year}-01-01` ? today() : null;
+      if (gs.strategy === 'rotacion') {
+        const nb = notBefore && notBefore > `${year}-12-31` ? `${year + 1}-01-01` : notBefore;
+        return { ...generateRotation({ ...ctx, vacations: [] }, { ...gs.rotation, periodLength: periodRules().periodLength || 15, notBefore: nb ? addDays(nb, 1) : null }), replaceOnly: true };
+      }
       const prop = generateProposal(ctx, {
         ...gs,
         ...periodRules(),
@@ -444,6 +448,13 @@ export function createService({ repo, hashPassword, verifyPassword, randomToken,
       if (!s.split.length) s.split = [15, 10, 5];
       s.substitutes = { enabled: !!s.substitutes?.enabled, length: Math.max(5, Math.min(31, Number(s.substitutes?.length) || 14)) };
       s.iterations = Math.max(5, Math.min(120, Number(s.iterations) || 40));
+      s.strategy = s.strategy === 'equilibrado' ? 'equilibrado' : 'rotacion';
+      const rot = s.rotation || {};
+      s.rotation = {
+        start: isISODate(rot.start) ? rot.start : null,
+        spread: !!rot.spread,
+        order: Object.fromEntries(Object.entries(rot.order || {}).map(([k, v]) => [k, (v || []).map(Number).filter(Boolean)])),
+      };
       setSetting('generator', s);
       log(user, null, 'Ajustes del generador', `Modo ${s.mode}, reparto ${s.split.join('+')}, suplentes ${s.substitutes.enabled ? `sí (${s.substitutes.length} días)` : 'no'}.`);
       return s;

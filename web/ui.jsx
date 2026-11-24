@@ -121,12 +121,21 @@ export function GroupDot({ team, shift }) {
   return <span class={`dot ${colorClass(team, shift)}`} title={groupLabel(team, shift)} />;
 }
 
+export function ShiftTag({ shift }) {
+  return <span class={`shift-tag ${shift}`}>{shift === 'M' ? '☀️ Mañana' : '🌙 Tarde'}</span>;
+}
+
 export function Legend() {
   return (
     <div class="legend">
-      <span><i class="dot c-cocina" /> Cocina</span>
-      <span><i class="dot c-sala-m" /> Camareros mañana</span>
-      <span><i class="dot c-sala-t" /> Camareros tarde</span>
+      <ShiftTag shift="M" />
+      <span><i class="dot c-cocina-m" /> Cocina</span>
+      <span><i class="dot c-sala-m" /> Camareros</span>
+      <i class="sep" />
+      <ShiftTag shift="T" />
+      <span><i class="dot c-cocina-t" /> Cocina</span>
+      <span><i class="dot c-sala-t" /> Camareros</span>
+      <i class="sep" />
       <span><i class="dot" style="background:var(--bad)" /> Falta personal</span>
       <span><i class="dot" style="background:var(--warn)" /> Al límite</span>
     </div>

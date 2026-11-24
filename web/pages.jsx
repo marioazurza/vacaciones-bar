@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'preact/hooks';
 import { api, runtime } from './api.js';
-import { Modal, Alert, Field, Stat, StatusBadge, GroupDot, Legend, run, toast, ask } from './ui.jsx';
+import { Modal, Alert, Field, Stat, StatusBadge, GroupDot, Legend, ShiftTag, run, toast, ask } from './ui.jsx';
 import { YearView, MonthView, WeekView, DayModal, Filters, weekStart } from './calendar.jsx';
 import { VacationModal, ChangeRequestModal, SwapModal, PreferenceModal } from './editors.jsx';
 import { buildCal, liveCheck, nameFn, statsFor } from './model.js';
@@ -75,7 +75,7 @@ export function MyVacationsPage({ data, reload, me }) {
 
   return (
     <>
-      <div class="row"><h1>Hola, {staff.first_name}</h1><span class="badge"><GroupDot team={staff.team} shift={staff.shift} /> {groupLabel(staff.team, staff.shift)}</span></div>
+      <div class="row"><h1>Hola, {staff.first_name}</h1><ShiftTag shift={staff.shift} /><span class="badge"><GroupDot team={staff.team} shift={staff.shift} /> {TEAMS[staff.team]}</span></div>
       {incoming.map((r) => (
         <Alert key={r.id} kind="info" title={`${nameOf(r.requester_id)} te propone un intercambio`}>
           <div>Tú cogerías <b>{formatRange(r.data.a.start, r.data.a.end)}</b> y {nameOf(r.requester_id)} cogería tus días <b>{formatRange(r.data.b.start, r.data.b.end)}</b>.{r.comment ? ` «${r.comment}»` : ''}</div>
@@ -230,8 +230,8 @@ export function TeamPage({ data, reload, onYear }) {
       {GROUPS.map((g) => {
         const list = data.staff.filter((s) => s.team === g.team && s.shift === g.shift);
         return (
-          <div class="card" key={g.key}>
-            <div class="card-head"><GroupDot team={g.team} shift={g.shift} /><h2>{groupLabel(g.team, g.shift)}</h2><span class="badge">{list.length} personas</span>
+          <div class={`card group-box shift-${g.shift}`} key={g.key}>
+            <div class="card-head"><ShiftTag shift={g.shift} /><GroupDot team={g.team} shift={g.shift} /><h2>{TEAMS[g.team]}</h2><span class="badge">{list.length} personas</span>
               <span class="small muted">Mínimo: {describeMinimumRow(data.minimums[g.team][g.shift])}</span></div>
             <div class="table-wrap"><table class="table">
               <thead><tr><th>Nombre</th><th class="hide-mobile">Usuario</th><th>Días</th><th>Asignados</th><th class="hide-mobile">Disfrutados</th><th /></tr></thead>
@@ -301,7 +301,7 @@ export function GeneratorPage({ data, reload }) {
     if (saved) setS(saved);
     const p = await run(() => api('generate', { year: data.year, settings: saved || s, keepExisting: keep }));
     setBusy(false);
-    if (p) setProp({ ...p, keep });
+    if (p) setProp({ ...p, keep: p.replaceOnly ? false : keep });
   };
   const apply = async () => {
     const ok = await run(() => api('applyProposal', { year: data.year, vacations: prop.vacations, reinforcements: prop.reinforcements, replace: !prop.keep }), 'Propuesta aplicada. Puedes seguir ajustándola en el calendario.');
@@ -311,6 +311,17 @@ export function GeneratorPage({ data, reload }) {
   const previewVacs = prop ? [...(prop.keep ? data.vacations : []), ...prop.vacations.map((v, i) => ({ ...v, id: -1000 - i }))] : null;
   const previewIds = prop ? new Set(prop.vacations.map((_, i) => -1000 - i)) : null;
   const cal = useMemo(() => (prop ? buildCal(data, { vacations: previewVacs, extraReinforcements: prop.reinforcements }) : null), [prop]);
+  const rot = s.strategy !== 'equilibrado';
+  const orderFor = (key) => {
+    const members = data.staff.filter((st) => `${st.team}-${st.shift}` === key);
+    const wanted = s.rotation?.order?.[key] || [];
+    return [...members].sort((x, y) => { const ix = wanted.indexOf(x.worker_id), iy = wanted.indexOf(y.worker_id); return (ix < 0 ? 999 : ix) - (iy < 0 ? 999 : iy) || x.name.localeCompare(y.name); });
+  };
+  const move = (key, k, dir) => {
+    const ids = orderFor(key).map((x) => x.worker_id);
+    [ids[k], ids[k + dir]] = [ids[k + dir], ids[k]];
+    setS({ ...s, rotation: { ...s.rotation, order: { ...(s.rotation?.order || {}), [key]: ids } } });
+  };
   const toggleMonth = (mm) => setS({ ...s, preferredMonths: s.preferredMonths.includes(mm) ? s.preferredMonths.filter((x) => x !== mm) : [...s.preferredMonths, mm] });
   const maxLoad = prop ? Math.max(1, ...prop.monthLoad) : 1;
 
@@ -320,30 +331,54 @@ export function GeneratorPage({ data, reload }) {
       <div class="card stack">
         <h2>Cómo quieres repartir las vacaciones</h2>
         <div class="seg">
-          <button class={s.mode === 'repartir' ? 'on' : ''} onClick={() => setS({ ...s, mode: 'repartir' })}>Repartir durante todo el año</button>
-          <button class={s.mode === 'verano' ? 'on' : ''} onClick={() => setS({ ...s, mode: 'verano' })}>Priorizar verano</button>
+          <button class={rot ? 'on' : ''} onClick={() => setS({ ...s, strategy: 'rotacion' })}>🔁 Rotación por turnos</button>
+          <button class={!rot ? 'on' : ''} onClick={() => setS({ ...s, strategy: 'equilibrado' })}>Reparto automático</button>
         </div>
-        <Field label="Meses preferentes (opcional)">
-          <div class="month-chips">{MONTHS_SHORT.map((t, i) => <button key={i} type="button" class={s.preferredMonths.includes(i) ? 'on' : ''} onClick={() => toggleMonth(i)}>{t}</button>)}</div>
-        </Field>
-        {data.periodRules?.periodLength ? (
-          <Alert kind="info" title={`Cada trabajador tendrá periodos de ${data.periodRules.periodLength} días seguidos.`}>
-            <div class="small">Con 30 días, son 2 periodos.{data.periodRules?.maxOffPerShift != null ? ` En cada turno solo puede haber ${data.periodRules.maxOffPerShift} persona${data.periodRules.maxOffPerShift === 1 ? '' : 's'} de vacaciones a la vez.` : ''} Puedes cambiar estas reglas en Ajustes.</div>
-          </Alert>
-        ) : <div class="grid2">
-          <Field label="Reparto de los días en periodos (ej.: 15, 10, 5)">
-            <input class="input" value={s.split.join(', ')} onChange={(e) => setS({ ...s, split: e.currentTarget.value.split(/[,+ ]+/).map(Number).filter((x) => x > 0) })} />
+        {rot ? <>
+          <div class="small muted">En cada turno, las vacaciones van una detrás de otra: cuando acaba un trabajador empieza el siguiente. Así nunca hay dos del mismo turno de vacaciones a la vez.</div>
+          <div class="grid2">
+            <Field label="Empieza la rotación el">
+              <input class="input" type="date" value={s.rotation?.start || `${data.year}-01-04`} min={`${data.year}-01-01`} max={`${data.year}-12-31`} onInput={(e) => setS({ ...s, rotation: { ...s.rotation, start: e.currentTarget.value } })} />
+            </Field>
+            <Field label={`Las ${Math.floor(30 / (data.periodRules?.periodLength || 15))} vueltas de cada turno`}>
+              <div class="seg">
+                <button class={!s.rotation?.spread ? 'on' : ''} onClick={() => setS({ ...s, rotation: { ...s.rotation, spread: false } })}>Seguidas</button>
+                <button class={s.rotation?.spread ? 'on' : ''} onClick={() => setS({ ...s, rotation: { ...s.rotation, spread: true } })}>Repartidas en el año</button>
+              </div>
+            </Field>
+          </div>
+          <div>
+            <div class="small muted" style="margin-bottom:8px">Orden de cada turno (usa las flechas para cambiarlo)</div>
+            <div class="grid2" style="grid-template-columns:repeat(auto-fit, minmax(min(100%, 380px), 1fr))">{GROUPS.map((g) => {
+              const list = orderFor(g.key);
+              if (!list.length) return null;
+              return (
+                <div key={g.key} class={`group-box shift-${g.shift}`}>
+                  <b class="row"><ShiftTag shift={g.shift} /> {TEAMS[g.team]}</b>
+                  {list.map((st, k) => (
+                    <div class="row" key={st.worker_id}>
+                      <span class="badge">{k + 1}</span><span style="flex:1">{st.name}</span>
+                      <button class="btn sm ghost" disabled={k === 0} aria-label="Subir" onClick={() => move(g.key, k, -1)}>↑</button>
+                      <button class="btn sm ghost" disabled={k === list.length - 1} aria-label="Bajar" onClick={() => move(g.key, k, 1)}>↓</button>
+                    </div>
+                  ))}
+                </div>
+              );
+            })}</div>
+          </div>
+          <Alert kind="warn" title="Al aplicar la rotación se sustituyen todas las vacaciones de este año en el calendario." />
+        </> : <>
+          <div class="seg">
+            <button class={s.mode === 'repartir' ? 'on' : ''} onClick={() => setS({ ...s, mode: 'repartir' })}>Repartir durante todo el año</button>
+            <button class={s.mode === 'verano' ? 'on' : ''} onClick={() => setS({ ...s, mode: 'verano' })}>Priorizar verano</button>
+          </div>
+          <Field label="Meses preferentes (opcional)">
+            <div class="month-chips">{MONTHS_SHORT.map((t, i) => <button key={i} type="button" class={s.preferredMonths.includes(i) ? 'on' : ''} onClick={() => toggleMonth(i)}>{t}</button>)}</div>
           </Field>
-          <Field label="Suplentes de cocina">
-            <div class="row">
-              <label class="row" style="color:var(--text);font-weight:400"><input type="checkbox" checked={s.substitutes.enabled} onChange={(e) => setS({ ...s, substitutes: { ...s.substitutes, enabled: e.currentTarget.checked } })} /> Proponer un suplente para que cada cocinero tenga un periodo seguido de</label>
-              <input class="input" type="number" min="5" max="31" style="width:70px" value={s.substitutes.length} onInput={(e) => setS({ ...s, substitutes: { ...s.substitutes, length: Number(e.currentTarget.value) } })} /> días
-            </div>
-          </Field>
-        </div>}
-        {data.periodRules?.periodLength > 0 && <label class="row"><input type="checkbox" checked={s.substitutes.enabled} onChange={(e) => setS({ ...s, substitutes: { ...s.substitutes, enabled: e.currentTarget.checked } })} /> Proponer suplentes en cocina</label>}
-        <label class="row"><input type="checkbox" checked={keep} onChange={(e) => setKeep(e.currentTarget.checked)} /> Mantener las vacaciones que ya están en el calendario y repartir solo los días pendientes</label>
-        <div class="small muted">Sin suplente, en cocina no puede faltar nadie de viernes a domingo, así que sus vacaciones irán en bloques de lunes a jueves. Las fechas bloqueadas y las preferencias de cada trabajador se tienen en cuenta.</div>
+          <label class="row"><input type="checkbox" checked={keep} onChange={(e) => setKeep(e.currentTarget.checked)} /> Mantener las vacaciones que ya están en el calendario y repartir solo los días pendientes</label>
+          <div class="small muted">Las fechas bloqueadas y las preferencias de cada trabajador se tienen en cuenta.</div>
+        </>}
+        {data.periodRules?.periodLength > 0 && <div class="small muted">Cada periodo dura {data.periodRules.periodLength} días seguidos{data.periodRules?.maxOffPerShift != null ? ` y en cada turno puede haber como máximo ${data.periodRules.maxOffPerShift} persona de vacaciones a la vez` : ''}. Se cambia en Ajustes.</div>}
         <div class="row"><button class="btn primary" disabled={busy} onClick={generate}>{busy ? 'Calculando…' : prop ? '↻ Generar otra propuesta' : '✨ Generar propuesta'}</button></div>
       </div>
 
@@ -354,7 +389,7 @@ export function GeneratorPage({ data, reload }) {
             <button class="btn ok" disabled={prop.issues.length > 0} onClick={apply}>Aplicar al calendario</button>
           </div>
           {prop.issues.length ? <Alert kind="bad" title="La propuesta tiene conflictos" items={prop.issues.slice(0, 6).map((i) => describeIssue(i, nameOf))} />
-            : <Alert kind="ok" title="Cumple todos los mínimos de cobertura los 365 días." />}
+            : <Alert kind="ok" title="Cumple todas las reglas todos los días del año." />}
           {Object.keys(prop.unassigned).length > 0 && <Alert kind="warn" title="No se pudieron colocar todos los días" items={Object.entries(prop.unassigned).map(([id, n]) => `${nameOf(Number(id))}: faltan ${n} días`)} />}
           {prop.reinforcements.length > 0 && <Alert kind="info" title={`La propuesta incluye ${prop.reinforcements.length} periodos de suplente en cocina`} items={prop.reinforcements.map((r) => `${groupLabel(r.team, r.shift)}: ${formatRange(r.start, r.end)} (${r.note})`)} />}
           <div>

@@ -4,7 +4,7 @@ import {
   periodLength, addDays, weekStart, diffDays, formatShort,
 } from '../shared/dates.js';
 import { GROUPS, colorClass, groupLabel, SHIFTS, TEAMS } from '../shared/rules.js';
-import { Modal, GroupDot, Alert } from './ui.jsx';
+import { Modal, GroupDot, Alert, ShiftTag } from './ui.jsx';
 
 /** Grupos y trabajadores que pasan los filtros. */
 export function applyFilters(staff, f) {
@@ -124,11 +124,16 @@ function TimelineView({ cal, filters, from, n, title, wide, onDay, onBar, onPick
     items.push(<div key={key} class={cls} style={{ gridRow: r, gridColumn: `${col(aa)} / ${col(bb) + 1}` }} title={tip} onClick={onClick}>{label}</div>);
   };
 
+  let lastShift = null;
   for (const g of GROUPS) {
     const members = staff.filter((s) => s.team === g.team && s.shift === g.shift);
     if (!members.length) continue;
     const G = cal.analysis.groups[g.key];
-    items.push(<div class="g-group" style={{ gridRow: row++ }} key={`g${g.key}`}><GroupDot team={g.team} shift={g.shift} /> {groupLabel(g.team, g.shift)} <span class="muted" style="text-transform:none;font-weight:500">· {members.length} personas</span></div>);
+    if (g.shift !== lastShift) {
+      lastShift = g.shift;
+      items.push(<div class={`shift-band ${g.shift}`} style={{ gridRow: row++ }} key={`sb${g.shift}`}>{g.shift === 'M' ? '☀️ Turno de mañana' : '🌙 Turno de tarde'}</div>);
+    }
+    items.push(<div class="g-group" style={{ gridRow: row++ }} key={`g${g.key}`}><GroupDot team={g.team} shift={g.shift} /> {TEAMS[g.team]} <span class="muted" style="text-transform:none;font-weight:500">· {SHIFTS[g.shift].toLowerCase()} · {members.length} personas</span></div>);
     for (const s of members) {
       const r = row++;
       items.push(<div class="g-name" style={{ gridRow: r, gridColumn: 1 }} key={`n${s.worker_id}`} title={s.name}><span class={`dot ${colorClass(s.team, s.shift)}`} />{s.name}</div>);
@@ -206,9 +211,9 @@ export function DayModal({ cal, date, onClose, canEdit, onAdd }) {
         const working = G.members.filter((id) => !off.has(id));
         const room = G.room[i];
         return (
-          <div key={g.key} class={`group-box ${G.problem[i] ? 'bad' : ''}`}>
+          <div key={g.key} class={`group-box shift-${g.shift} ${G.problem[i] ? 'bad' : ''}`}>
             <div class="row">
-              <GroupDot team={g.team} shift={g.shift} /><b>{TEAMS[g.team]} · {SHIFTS[g.shift]}</b>
+              <ShiftTag shift={g.shift} /><GroupDot team={g.team} shift={g.shift} /><b>{TEAMS[g.team]}</b>
               <span class="spacer" />
               <span class={`badge ${G.problem[i] ? 'bad' : room <= 0 ? 'warn' : 'ok'}`}>
                 {G.deficit[i] ? `Faltan ${G.deficit[i]}` : G.over[i] ? `Demasiados de vacaciones` : room <= 0 ? 'Al límite' : `Puede faltar ${room} más`}
