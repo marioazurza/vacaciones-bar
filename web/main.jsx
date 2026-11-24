@@ -47,7 +47,7 @@ function Login({ onLogin }) {
         <button class="btn primary" type="submit" style="justify-content:center">Entrar</button>
         {runtime.demo && (
           <div class="stack" style="gap:6px">
-            <div class="small muted">Versión de prueba: entra con un clic como administrador o como cualquier trabajador.</div>
+            <div class="small muted">Versión de prueba: el administrador entra con su usuario y contraseña. Para ver la app como un trabajador, entra con un clic:</div>
             <div class="demo-users">
               {runtime.demoUsers.map((d) => <button type="button" key={d.username} class={`btn sm ${d.username === 'admin' ? 'primary' : ''}`} onClick={() => submit(null, d.username, d.password)}>{d.label}</button>)}
             </div>

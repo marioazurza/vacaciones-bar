@@ -106,12 +106,12 @@ export function createService({ repo, hashPassword, verifyPassword, randomToken,
   }
 
   // ---------- semilla inicial ----------
-  function seed({ adminPassword = 'admin', workerPassword = '1234', withDemoPlan = true } = {}) {
+  function seed({ adminUsername = 'admin', adminPassword = 'admin', workerPassword = '1234', withDemoPlan = true } = {}) {
     if (repo.all('users').length) return false;
     repo.tx(() => {
       const thisYear = Number(today().slice(0, 4));
       const planYear = thisYear + 1;
-      repo.insert('users', { username: 'admin', password_hash: hashPassword(adminPassword), role: 'admin', worker_id: null, created_at: now() });
+      repo.insert('users', { username: String(adminUsername).trim().toLowerCase(), password_hash: hashPassword(adminPassword), role: 'admin', worker_id: null, created_at: now() });
       setSetting('minimums', DEFAULT_MINIMUMS);
       setSetting('generator', DEFAULT_GENERATOR_SETTINGS);
       repo.insert('years', { year: thisYear, status: 'publicado', published_at: now() });

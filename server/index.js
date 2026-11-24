@@ -27,8 +27,9 @@ function verifyPassword(pw, stored) {
 export function createApp({ dbFile = DB_FILE } = {}) {
   const repo = openRepo(dbFile);
   const service = createService({ repo, hashPassword, verifyPassword, randomToken: () => randomBytes(32).toString('hex') });
-  const seeded = service.seed({ adminPassword: process.env.ADMIN_PASSWORD || 'admin' });
-  if (seeded) console.log('Base de datos creada con datos de ejemplo. Usuario: admin / contraseña: ' + (process.env.ADMIN_PASSWORD ? '(ADMIN_PASSWORD)' : 'admin'));
+  const adminUsername = process.env.ADMIN_USERNAME || 'admin';
+  const seeded = service.seed({ adminUsername, adminPassword: process.env.ADMIN_PASSWORD || 'admin' });
+  if (seeded) console.log(`Base de datos creada con datos de ejemplo. Administrador: ${adminUsername.toLowerCase()} / contraseña: ${process.env.ADMIN_PASSWORD ? '(ADMIN_PASSWORD)' : 'admin'}`);
 
   const app = express();
   app.disable('x-powered-by');

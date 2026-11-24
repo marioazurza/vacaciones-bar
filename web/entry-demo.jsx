@@ -24,9 +24,21 @@ const service = createService({
   verifyPassword: (p, h) => h === `demo:${p}`,
   randomToken: () => Math.random().toString(36).slice(2) + Date.now().toString(36),
 });
-service.seed({ adminPassword: 'admin', workerPassword: '1234' });
+// Administrador de la versión de prueba.
+// Se fijan al compilar: DEMO_ADMIN_USER y DEMO_ADMIN_PASSWORD (por defecto admin / admin).
+const ADMIN = { username: __DEMO_ADMIN_USER__, password: __DEMO_ADMIN_PASSWORD__ };
+service.seed({ adminUsername: ADMIN.username, adminPassword: ADMIN.password, workerPassword: '1234' });
+// Datos de prueba creados antes con el usuario "admin": se renombra sin perder nada.
+repo.tx(() => {
+  for (const u of repo.all('users', { role: 'admin' })) {
+    if (u.username === 'admin' && ADMIN.username !== 'admin') {
+      repo.update('users', u.id, { username: ADMIN.username, password_hash: `demo:${ADMIN.password}` });
+      repo.removeWhere('sessions', { user_id: u.id });
+    }
+  }
+});
 
-const demoUsers = [{ username: 'admin', password: 'admin', label: 'Administrador' }];
+const demoUsers = [];
 for (const u of repo.all('users', { role: 'worker' })) {
   const w = repo.get('workers', u.worker_id);
   demoUsers.push({ username: u.username, password: '1234', label: w ? w.first_name : u.username });

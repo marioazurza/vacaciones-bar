@@ -37,7 +37,13 @@ await build({ ...common, entryPoints: { app: 'web/entry-server.jsx' }, outdir: '
 writeFileSync('dist/index.html', html('<script type="module" src="/app.js"></script>', '<link rel="stylesheet" href="/app.css">'));
 
 mkdirSync('dist-demo', { recursive: true });
-await build({ ...common, entryPoints: { demo: 'web/entry-demo.jsx' }, outdir: 'dist-demo/tmp', format: 'iife' });
+await build({
+  ...common, entryPoints: { demo: 'web/entry-demo.jsx' }, outdir: 'dist-demo/tmp', format: 'iife',
+  define: {
+    __DEMO_ADMIN_USER__: JSON.stringify((process.env.DEMO_ADMIN_USER || 'admin').toLowerCase()),
+    __DEMO_ADMIN_PASSWORD__: JSON.stringify(process.env.DEMO_ADMIN_PASSWORD || 'admin'),
+  },
+});
 const js = readFileSync('dist-demo/tmp/demo.js', 'utf8').replace(/<\/script/gi, '<\\/script');
 const css = readFileSync('dist-demo/tmp/demo.css', 'utf8');
 writeFileSync('dist-demo/vacaciones-demo.html', html(`<script>${js}</script>`, `<style>${css}</style>`));
