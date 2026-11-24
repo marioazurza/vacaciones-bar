@@ -41,6 +41,8 @@ export function createApp({ dbFile = DB_FILE } = {}) {
     next();
   });
 
+  app.get('/salud', (_, res) => res.json({ ok: true }));
+
   app.post('/api/:action', (req, res) => {
     const { action } = req.params;
     try {

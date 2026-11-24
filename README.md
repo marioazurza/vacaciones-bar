@@ -42,3 +42,11 @@ Comprueban los ejemplos de conflictos, los suplentes, que el generador da 30 dí
 ## Desplegar
 
 Cualquier servicio que ejecute Node 22 con un disco persistente para `data/` sirve (Render, Railway, Fly.io, un VPS…). Comando de compilación `npm install && npm run build`, comando de arranque `npm start`. Hay que montar un volumen persistente en `data/` (o fijar `DB_FILE`) para no perder datos.
+
+### Railway (recomendado)
+
+1. Sube este código a un repositorio de GitHub.
+2. En Railway: *New Project → Deploy from GitHub repo* y elige el repositorio. Railway detecta el `Dockerfile`.
+3. En el servicio, *Settings → Volumes*: añade un volumen montado en `/data` (ahí se guarda la base de datos).
+4. En *Variables* añade `ADMIN_USERNAME` y `ADMIN_PASSWORD` **antes del primer arranque**.
+5. En *Settings → Networking* pulsa *Generate Domain* para tener la dirección web.
