@@ -136,7 +136,7 @@ export function Legend() {
       <span><i class="chip-k c-cocina-t">C</i> 🍳 Cocina</span>
       <span><i class="chip-k c-sala-t">S</i> 🍽️ Camareros</span>
       <i class="sep" />
-      <span><i class="dot" style="background:var(--bad)" /> Falta personal</span>
+      <span class="muted"><i class="dot" style="background:var(--bad)" /> Si un día sale en rojo, incumple una regla</span>
     </div>
   );
 }
