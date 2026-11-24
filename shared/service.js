@@ -138,13 +138,15 @@ export function createService({ repo, hashPassword, verifyPassword, randomToken,
         repo.insert('users', { username: slug(first), password_hash: hashPassword(workerPassword), role: 'worker', worker_id: w.id, created_at: now() });
       }
       if (withDemoPlan) {
-        // Año en curso ya publicado, para poder ver días disfrutados y años anteriores.
-        const ctx = ctxFor(thisYear);
-        const prop = generateProposal(ctx, { ...DEFAULT_GENERATOR_SETTINGS, ...DEFAULT_PERIOD_RULES, seed: 2024, iterations: 15 });
-        for (const r of prop.reinforcements) repo.insert('reinforcements', r);
-        for (const v of prop.vacations) repo.insert('vacations', { ...v, year: thisYear, note: '', created_at: now() });
+        // Los dos años ya configurados con la rotación por turnos: 15 días seguidos por
+        // persona, uno detrás de otro, nunca dos del mismo turno a la vez.
+        for (const year of [thisYear, planYear]) {
+          const prop = generateRotation(ctxFor(year), { periodLength: DEFAULT_PERIOD_RULES.periodLength });
+          if (prop.issues.length) continue;
+          for (const v of prop.vacations) repo.insert('vacations', { ...v, year, note: 'Rotación por turnos', created_at: now() });
+        }
       }
-      log(null, null, 'Inicio', 'Se crearon los 12 trabajadores de ejemplo y las reglas de cobertura.');
+      log(null, null, 'Inicio', 'Se crearon los 12 trabajadores de ejemplo y las vacaciones en rotación por turnos (15 días seguidos, máximo 1 por turno a la vez).');
     });
     return true;
   }
