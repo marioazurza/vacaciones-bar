@@ -43,8 +43,8 @@ function dayInfo(cal, i, visibleIds) {
     const offHere = [...new Set(G.off[i])];
     const shown = offHere.filter((id) => visibleIds.has(id));
     if (G.members.some((id) => visibleIds.has(id)) || shown.length) {
-      if (G.deficit[i] > 0) bad = true;
-      else if (offHere.length > 0 && G.available[i] === G.need[i]) full = true;
+      if (G.problem[i] > 0) bad = true;
+      else if (offHere.length > 0 && G.room[i] <= 0) full = true;
     }
     for (const id of shown) marks.push({ id, cls: colorClass(g.team, g.shift) });
   }
@@ -105,6 +105,8 @@ function TimelineView({ cal, filters, from, n, title, wide, onDay, onBar, onPick
   const staff = applyFilters(cal.staff, filters);
   const cols = wide ? `minmax(140px, 190px) repeat(${n}, minmax(96px, 1fr))` : `minmax(150px, 190px) repeat(${n}, minmax(32px, 1fr))`;
   const col = (date) => 2 + diffDays(from, date);
+  // Si hay máximo por turno y ningún mínimo, la fila resumen muestra cuántos faltan.
+  const byMax = Object.values(cal.analysis.groups).some((G) => Number.isFinite(G.allowedOff[0])) && Object.values(cal.minimums).every((t) => Object.values(t).every((row) => row.every((x) => x === 0)));
   let row = 2;
   const items = [];
 
@@ -162,12 +164,13 @@ function TimelineView({ cal, filters, from, n, title, wide, onDay, onBar, onPick
       subs.forEach((x, k) => bar(`s${g.key}${k}`, r, x.start, x.end, `g-bar sub ${colorClass(g.team, g.shift)}`, wide ? `${x.note || 'Suplente'} · ${formatRange(x.start, x.end)}` : (x.note || 'Suplente'), `${x.note || 'Suplente'}: ${formatRange(x.start, x.end)}`, null));
     }
     const r = row++;
-    items.push(<div class="g-name small muted" style={{ gridRow: r, gridColumn: 1 }} key={`cv${g.key}`}>{wide ? 'Trabajando / mínimo' : 'Disponibles / mínimo'}</div>);
+    items.push(<div class="g-name small muted" style={{ gridRow: r, gridColumn: 1 }} key={`cv${g.key}`}>{byMax ? 'De vacaciones / máximo' : wide ? 'Trabajando / mínimo' : 'Disponibles / mínimo'}</div>);
     days.forEach((date, d) => {
       if (!inYear(date)) { items.push(<div key={`cv${g.key}${d}`} class="g-cov" style={{ gridRow: r, gridColumn: 2 + d }} />); return; }
       const i = dayIndex(date, cal.year);
-      const cls = G.deficit[i] > 0 ? 'bad' : G.available[i] === G.need[i] && G.off[i].length ? 'full' : 'ok';
-      items.push(<div key={`cv${g.key}${d}`} class={`g-cov ${cls}`} style={{ gridRow: r, gridColumn: 2 + d }} onClick={() => onDay(date)} title="Ver el día">{wide ? `${G.available[i]} de ${G.need[i]}` : `${G.available[i]}/${G.need[i]}`}</div>);
+      const cls = G.problem[i] > 0 ? 'bad' : G.room[i] <= 0 && G.off[i].length ? 'full' : 'ok';
+      const txt = byMax ? (wide ? `${G.offCount[i]} de ${G.allowedOff[i]} fuera` : `${G.offCount[i]}/${G.allowedOff[i]}`) : (wide ? `${G.available[i]} de ${G.need[i]}` : `${G.available[i]}/${G.need[i]}`);
+      items.push(<div key={`cv${g.key}${d}`} class={`g-cov ${cls}`} style={{ gridRow: r, gridColumn: 2 + d }} onClick={() => onDay(date)} title="Ver el día">{txt}</div>);
     });
   }
   if (!staff.length) return <div class="card empty">No hay trabajadores con estos filtros.</div>;
@@ -201,17 +204,17 @@ export function DayModal({ cal, date, onClose, canEdit, onAdd }) {
         const G = cal.analysis.groups[g.key];
         const off = new Set(G.off[i]);
         const working = G.members.filter((id) => !off.has(id));
-        const room = G.available[i] - G.need[i];
+        const room = G.room[i];
         return (
-          <div key={g.key} class={`group-box ${G.deficit[i] ? 'bad' : ''}`}>
+          <div key={g.key} class={`group-box ${G.problem[i] ? 'bad' : ''}`}>
             <div class="row">
               <GroupDot team={g.team} shift={g.shift} /><b>{TEAMS[g.team]} · {SHIFTS[g.shift]}</b>
               <span class="spacer" />
-              <span class={`badge ${G.deficit[i] ? 'bad' : room === 0 ? 'warn' : 'ok'}`}>
-                {G.deficit[i] ? `Faltan ${G.deficit[i]}` : room === 0 ? 'Al límite' : `Puede faltar ${room} más`}
+              <span class={`badge ${G.problem[i] ? 'bad' : room <= 0 ? 'warn' : 'ok'}`}>
+                {G.deficit[i] ? `Faltan ${G.deficit[i]}` : G.over[i] ? `Demasiados de vacaciones` : room <= 0 ? 'Al límite' : `Puede faltar ${room} más`}
               </span>
             </div>
-            <div class="small muted">Mínimo {G.need[i]} · Disponibles {G.available[i]}{G.extra[i] ? ` (con ${G.extra[i]} suplente)` : ''}</div>
+            <div class="small muted">{Number.isFinite(G.allowedOff[i]) ? `Máximo ${G.allowedOff[i]} de vacaciones a la vez · ` : ''}{G.need[i] ? `Mínimo ${G.need[i]} · ` : ''}Trabajando {G.available[i]}{G.extra[i] ? ` (con ${G.extra[i]} suplente)` : ''}</div>
             <div class="row">
               <span class="small muted" style="width:90px">Trabajando</span>
               {working.length ? working.map((id) => <span key={id} class={`chip ${colorClass(g.team, g.shift)}`}>{cal.staffById.get(id)?.name}</span>) : <span class="small muted">Nadie</span>}

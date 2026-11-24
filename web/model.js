@@ -4,7 +4,7 @@ import { analyze, newIssues, describeIssue, workerStats, checkPeriodShape } from
 export function buildCal(data, { vacations, extraReinforcements = [] } = {}) {
   const vs = vacations ?? data.vacations;
   const reinforcements = [...data.reinforcements, ...extraReinforcements];
-  const analysis = analyze({ year: data.year, staff: data.staff, vacations: vs, minimums: data.minimums, reinforcements, blocked: data.blocked });
+  const analysis = analyze({ year: data.year, staff: data.staff, vacations: vs, minimums: data.minimums, reinforcements, blocked: data.blocked, maxOffPerShift: data.periodRules?.maxOffPerShift });
   return {
     year: data.year,
     staff: data.staff,
@@ -35,7 +35,7 @@ export function liveCheck(data, vacationsAfter, { year = data.year, start, end }
     const len = Math.round((Date.parse(end) - Date.parse(start)) / 864e5) + 1;
     if (L && len !== L) return [`Cada periodo de vacaciones debe ser de ${L} días seguidos.`];
   }
-  const base = { year: data.year, staff: data.staff, minimums: data.minimums, reinforcements: data.reinforcements, blocked: data.blocked };
+  const base = { year: data.year, staff: data.staff, minimums: data.minimums, reinforcements: data.reinforcements, blocked: data.blocked, maxOffPerShift: data.periodRules?.maxOffPerShift };
   const before = analyze({ ...base, vacations: data.vacations }).issues;
   const after = analyze({ ...base, vacations: vacationsAfter }).issues;
   const bad = newIssues(before, after);

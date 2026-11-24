@@ -111,7 +111,7 @@ export function generateProposal(ctx, opts = {}) {
     const slack = {};
     const subUsed = {};
     for (const [k, g] of Object.entries(base.groups)) {
-      slack[k] = g.available.map((a, i) => a - g.need[i]);
+      slack[k] = g.room.map((r) => (Number.isFinite(r) ? r : 99));
       subUsed[k] = new Array(N).fill(false);
     }
     const load = new Array(N).fill(0);

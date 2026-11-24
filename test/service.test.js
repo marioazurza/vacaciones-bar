@@ -2,8 +2,9 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { openRepo } from '../server/db.js';
 import { createService, ApiError } from '../shared/service.js';
+import { DEFAULT_MINIMUMS } from '../shared/rules.js';
 
-function setup({ periodLength = 0 } = {}) {
+function setup({ periodLength = 0, legacy = true } = {}) {
   const repo = openRepo(':memory:');
   let n = 0;
   const service = createService({
@@ -17,6 +18,11 @@ function setup({ periodLength = 0 } = {}) {
   const login = (u, p) => service.call(null, 'login', { username: u, password: p }).token;
   const admin = login('admin', 'admin');
   service.call(admin, 'savePeriodRules', { periodLength });
+  if (legacy) {
+    // Reglas originales: mínimos por día de la semana y sin máximo por turno.
+    service.call(admin, 'saveMinimums', { minimums: DEFAULT_MINIMUMS });
+    service.call(admin, 'savePeriodRules', { maxOffPerShift: null });
+  }
   return { repo, service, admin, login };
 }
 
@@ -125,7 +131,7 @@ test('duplicar la plantilla para el año siguiente', () => {
   assert.equal(service.call(admin, 'getYear', { year: 2028 }).staff.length, 12);
 });
 
-test('periodos fijos de 15 días: el generador da 2 × 15 a todos y propone suplentes en cocina', () => {
+test('periodos fijos de 15 días con mínimos antiguos: suplentes en cocina', () => {
   const { service, admin } = setup({ periodLength: 15 });
   const prop = service.call(admin, 'generate', { year: 2027 });
   assert.equal(prop.issues.length, 0);
@@ -138,4 +144,21 @@ test('periodos fijos de 15 días: el generador da 2 × 15 a todos y propone supl
   assert.equal(d.periodRules.periodLength, 15);
   const e = err(() => service.call(admin, 'saveVacation', { year: 2027, worker_id: d.staff[5].worker_id, start: '2027-03-01', end: '2027-03-04' }));
   assert.match(e.message, /15 días seguidos/);
+});
+
+test('regla actual: 15 días seguidos y máximo 1 de vacaciones a la vez por turno', () => {
+  const { service, admin } = setup({ periodLength: 15, legacy: false });
+  const d = service.call(admin, 'getYear', { year: 2027 });
+  assert.equal(d.periodRules.maxOffPerShift, 1);
+  const [a, b] = d.staff.filter((s) => s.team === 'sala' && s.shift === 'M');
+  const cook = d.staff.find((s) => s.team === 'cocina');
+  service.call(admin, 'saveVacation', { year: 2027, worker_id: a.worker_id, start: '2027-03-01', end: '2027-03-15' });
+  const e = err(() => service.call(admin, 'saveVacation', { year: 2027, worker_id: b.worker_id, start: '2027-03-10', end: '2027-03-24' }));
+  assert.match(e.message, /mismo turno/);
+  // Otro turno sí puede coincidir, y un cocinero puede librar en fin de semana
+  service.call(admin, 'saveVacation', { year: 2027, worker_id: cook.worker_id, start: '2027-03-01', end: '2027-03-15' });
+  const prop = service.call(admin, 'generate', { year: 2027 });
+  assert.equal(prop.issues.length, 0);
+  assert.deepEqual(prop.unassigned, {});
+  assert.equal(prop.reinforcements.length, 0);
 });

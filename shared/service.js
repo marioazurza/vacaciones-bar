@@ -6,13 +6,13 @@
 // también si lo hace el administrador.
 
 import {
-  DEFAULT_MINIMUMS, DEFAULT_ANNUAL_DAYS, TEAMS, SHIFTS, analyze, newIssues, describeIssue,
+  DEFAULT_MINIMUMS, DEFAULT_ANNUAL_DAYS, DEFAULT_MAX_OFF_PER_SHIFT, NO_MINIMUMS, TEAMS, SHIFTS, analyze, newIssues, describeIssue,
   checkPeriodShape, normalizeMinimums, groupLabel,
 } from './rules.js';
 import { generateProposal, DEFAULT_GENERATOR_SETTINGS } from './generator.js';
 import { formatRange, overlaps, periodLength, todayISO, isISODate } from './dates.js';
 
-export const DEFAULT_PERIOD_RULES = { periodLength: 15 };
+export const DEFAULT_PERIOD_RULES = { periodLength: 15, maxOffPerShift: DEFAULT_MAX_OFF_PER_SHIFT };
 
 export class ApiError extends Error {
   constructor(status, message, details = []) {
@@ -75,6 +75,7 @@ export function createService({ repo, hashPassword, verifyPassword, randomToken,
       minimums: over.minimums ?? minimums(),
       reinforcements: over.reinforcements ?? repo.all('reinforcements'),
       blocked: over.blocked ?? repo.all('blocked', { year }),
+      maxOffPerShift: over.maxOffPerShift !== undefined ? over.maxOffPerShift : periodRules().maxOffPerShift,
     };
   }
 
@@ -86,7 +87,8 @@ export function createService({ repo, hashPassword, verifyPassword, randomToken,
     if (bad.length) {
       const nameOf = nameOfFn();
       const coverage = bad.some((i) => i.type === 'coverage');
-      const msg = `${intro} ${coverage ? 'dejaría al bar por debajo de la cobertura mínima' : 'incumple las reglas'}${bad.length > 1 ? ` (${bad.length} conflictos)` : ''}.`;
+      const shiftmax = bad.some((i) => i.type === 'shiftmax');
+      const msg = `${intro} ${coverage ? 'dejaría al bar por debajo de la cobertura mínima' : shiftmax ? 'habría demasiadas personas del mismo turno de vacaciones a la vez' : 'incumple las reglas'}${bad.length > 1 ? ` (${bad.length} conflictos)` : ''}.`;
       throw new ApiError(409, msg, bad.slice(0, 12).map((i) => describeIssue(i, nameOf)).concat(bad.length > 12 ? [`… y ${bad.length - 12} más.`] : []));
     }
   }
@@ -125,7 +127,7 @@ export function createService({ repo, hashPassword, verifyPassword, randomToken,
       const thisYear = Number(today().slice(0, 4));
       const planYear = thisYear + 1;
       repo.insert('users', { username: String(adminUsername).trim().toLowerCase(), password_hash: hashPassword(adminPassword), role: 'admin', worker_id: null, created_at: now() });
-      setSetting('minimums', DEFAULT_MINIMUMS);
+      setSetting('minimums', NO_MINIMUMS);
       setSetting('generator', DEFAULT_GENERATOR_SETTINGS);
       setSetting('periods', DEFAULT_PERIOD_RULES);
       repo.insert('years', { year: thisYear, status: 'publicado', published_at: now() });
@@ -447,12 +449,18 @@ export function createService({ repo, hashPassword, verifyPassword, randomToken,
       return s;
     },
 
-    savePeriodRules({ periodLength: L }, user) {
-      L = Math.floor(Number(L) || 0);
+    savePeriodRules(p, user) {
+      const cur = periodRules();
+      let L = p.periodLength !== undefined ? Math.floor(Number(p.periodLength) || 0) : cur.periodLength;
       if (L < 0 || L > 31) throw new ApiError(400, 'La duración debe estar entre 1 y 31 días, o 0 para dejarla libre.');
-      setSetting('periods', { periodLength: L });
-      log(user, null, 'Duración de los periodos', L ? `Cada periodo de vacaciones dura ${L} días seguidos.` : 'Duración de los periodos libre.');
-      return { periodLength: L };
+      let M = p.maxOffPerShift !== undefined ? (p.maxOffPerShift === null || p.maxOffPerShift === '' ? null : Math.floor(Number(p.maxOffPerShift))) : cur.maxOffPerShift;
+      if (M != null && !(M >= 0 && M <= 10)) throw new ApiError(400, 'El máximo por turno debe estar entre 0 y 10.');
+      if (M !== cur.maxOffPerShift) {
+        for (const year of activeYears()) guard(year, { maxOffPerShift: M }, `No se puede aplicar ese máximo en ${year} porque el calendario actual`);
+      }
+      setSetting('periods', { periodLength: L, maxOffPerShift: M });
+      log(user, null, 'Reglas de vacaciones', `${L ? `Periodos de ${L} días seguidos` : 'Periodos de duración libre'} · ${M == null ? 'sin máximo por turno' : `máximo ${M} de vacaciones a la vez por turno`}.`);
+      return { periodLength: L, maxOffPerShift: M };
     },
 
     saveBlocked({ id, year, start, end, reason }, user) {

@@ -328,7 +328,7 @@ export function GeneratorPage({ data, reload }) {
         </Field>
         {data.periodRules?.periodLength ? (
           <Alert kind="info" title={`Cada trabajador tendrá periodos de ${data.periodRules.periodLength} días seguidos.`}>
-            <div class="small">Con 30 días, son 2 periodos. En cocina no puede faltar nadie el fin de semana, así que el generador propone un suplente para cada periodo de cada cocinero. Puedes cambiar la duración en Ajustes.</div>
+            <div class="small">Con 30 días, son 2 periodos.{data.periodRules?.maxOffPerShift != null ? ` En cada turno solo puede haber ${data.periodRules.maxOffPerShift} persona${data.periodRules.maxOffPerShift === 1 ? '' : 's'} de vacaciones a la vez.` : ''} Puedes cambiar estas reglas en Ajustes.</div>
           </Alert>
         ) : <div class="grid2">
           <Field label="Reparto de los días en periodos (ej.: 15, 10, 5)">
@@ -404,10 +404,10 @@ export function SettingsPage({ data, reload }) {
       <div class="row"><h1>Ajustes</h1><span class="spacer" /><a class="btn sm" href="#historial">🕘 Historial de cambios</a></div>
       <PeriodCard data={data} reload={reload} />
       <div class="card">
-        <div class="card-head"><h2>Mínimos de cobertura</h2><span class="spacer" />
+        <div class="card-head"><h2>Mínimos de personal por día <span class="badge">Opcional</span></h2><span class="spacer" />
           {changed && <button class="btn" onClick={() => setMins(data.minimums)}>Deshacer</button>}
           <button class="btn primary" disabled={!changed} onClick={saveMins}>Guardar mínimos</button></div>
-        <div class="small muted" style="margin-bottom:10px">Personas que tienen que estar trabajando cada día en cada turno. Si un cambio deja el calendario actual por debajo del mínimo, no se podrá guardar.</div>
+        <div class="small muted" style="margin-bottom:10px">Personas que tienen que estar trabajando cada día en cada turno, además de la regla anterior. Déjalo a 0 si no lo necesitas. Si un cambio deja el calendario por debajo del mínimo, no se podrá guardar.</div>
         <div class="table-wrap"><table class="table min-table">
           <thead><tr><th>Grupo</th><th>Plantilla</th>{WEEKDAYS.map((d) => <th key={d}>{d.slice(0, 3)}</th>)}<th>Pueden faltar</th></tr></thead>
           <tbody>{GROUPS.map((g) => {
@@ -460,12 +460,23 @@ export function SettingsPage({ data, reload }) {
 
 function PeriodCard({ data, reload }) {
   const [L, setL] = useState(data.periodRules?.periodLength ?? 15);
-  useEffect(() => setL(data.periodRules?.periodLength ?? 15), [data]);
+  const [M, setM] = useState(data.periodRules?.maxOffPerShift ?? 1);
+  useEffect(() => { setL(data.periodRules?.periodLength ?? 15); setM(data.periodRules?.maxOffPerShift ?? 1); }, [data]);
   const fixed = L > 0;
   const save = async (v) => (await run(() => api('savePeriodRules', { periodLength: v }), 'Guardado')) && reload();
+  const saveM = async (v) => (await run(() => api('savePeriodRules', { maxOffPerShift: v }), 'Guardado')) && reload();
+  const hasMax = data.periodRules?.maxOffPerShift != null;
   return (
     <div class="card stack">
-      <div class="card-head" style="margin:0"><h2>Periodos de vacaciones</h2></div>
+      <div class="card-head" style="margin:0"><h2>Reglas de vacaciones</h2></div>
+      <label class="row"><input type="checkbox" checked={hasMax} onChange={(e) => saveM(e.currentTarget.checked ? 1 : null)} /> Limitar cuántas personas de un mismo turno pueden estar de vacaciones a la vez</label>
+      {hasMax && (
+        <div class="row">Como máximo
+          <input class="input" type="number" min="0" max="10" style="width:70px" value={M} onInput={(e) => setM(Number(e.currentTarget.value))} /> persona(s) de vacaciones a la vez en cada turno (cocina mañana, cocina tarde, camareros mañana y camareros tarde)
+          {M !== data.periodRules?.maxOffPerShift && <button class="btn primary sm" onClick={() => saveM(M)}>Guardar</button>}
+        </div>
+      )}
+      <hr style="border:none;border-top:1px solid var(--border);margin:4px 0" />
       <label class="row"><input type="checkbox" checked={fixed} onChange={(e) => { const v = e.currentTarget.checked ? 15 : 0; setL(v); save(v); }} /> Todos los periodos tienen la misma duración</label>
       {fixed && (
         <div class="row">Cada periodo dura
@@ -519,7 +530,7 @@ export function SummaryPage({ data }) {
   const totals = data.staff.reduce((a, s) => { const st = workerStats(s, data.vacations, data.today); a.total += st.total; a.assigned += st.assigned; a.enjoyed += st.enjoyed; return a; }, { total: 0, assigned: 0, enjoyed: 0 });
   // Días al límite: ya no cabe nadie más de vacaciones en algún grupo
   let fullDays = 0;
-  for (let i = 0; i < cal.analysis.N; i++) if (GROUPS.some((g) => { const G = cal.analysis.groups[g.key]; return G.members.length && G.available[i] <= G.need[i]; })) fullDays++;
+  for (let i = 0; i < cal.analysis.N; i++) if (GROUPS.some((g) => { const G = cal.analysis.groups[g.key]; return G.members.length && G.room[i] <= 0; })) fullDays++;
   const exp = async (kind) => {
     if (runtime.noDownloads) { toast('En esta versión de prueba no se pueden descargar archivos. En la aplicación instalada, este botón descarga el Excel o el PDF.'); return; }
     setBusy(kind);

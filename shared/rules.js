@@ -17,6 +17,16 @@ export const GROUPS = [
 
 export const DEFAULT_ANNUAL_DAYS = 30;
 
+// Regla principal: como máximo esta cantidad de personas de vacaciones a la vez en
+// cada turno (equipo + turno). Un suplente permite una más. null = sin límite.
+export const DEFAULT_MAX_OFF_PER_SHIFT = 1;
+
+// Mínimos por día sin restricciones adicionales (la regla de "1 por turno" ya basta).
+export const NO_MINIMUMS = {
+  cocina: { M: [0, 0, 0, 0, 0, 0, 0], T: [0, 0, 0, 0, 0, 0, 0] },
+  sala: { M: [0, 0, 0, 0, 0, 0, 0], T: [0, 0, 0, 0, 0, 0, 0] },
+};
+
 // Mínimos por día de la semana (lunes ... domingo).
 export const DEFAULT_MINIMUMS = {
   cocina: { M: [1, 1, 1, 1, 2, 2, 2], T: [1, 1, 1, 1, 2, 2, 2] },
@@ -112,14 +122,28 @@ export function analyze(ctx) {
     if (pw.assigned > pw.limit) issues.push({ type: 'overlimit', worker_id: wid, assigned: pw.assigned, limit: pw.limit });
   }
 
+  const maxOff = ctx.maxOffPerShift == null || ctx.maxOffPerShift === '' ? null : Number(ctx.maxOffPerShift);
   for (const g of Object.values(groups)) {
     g.available = new Array(N);
     g.deficit = new Array(N);
+    g.allowedOff = new Array(N);
+    g.offCount = new Array(N);
+    g.over = new Array(N);
+    g.room = new Array(N);
+    g.problem = new Array(N);
     for (let i = 0; i < N; i++) {
       // Un trabajador que aparece dos veces el mismo día (periodos solapados) solo falta una vez.
       const offCount = new Set(g.off[i]).size;
+      g.offCount[i] = offCount;
       g.available[i] = g.members.length - offCount + g.extra[i];
       g.deficit[i] = Math.max(0, g.need[i] - g.available[i]);
+      g.allowedOff[i] = maxOff == null ? Infinity : maxOff + g.extra[i];
+      g.over[i] = Math.max(0, offCount - g.allowedOff[i]);
+      g.room[i] = Math.min(g.available[i] - g.need[i], g.allowedOff[i] - offCount);
+      g.problem[i] = g.deficit[i] || g.over[i];
+      if (g.over[i] > 0) {
+        issues.push({ type: 'shiftmax', date: dateFromIndex(year, i), team: g.team, shift: g.shift, max: g.allowedOff[i], count: offCount, off: [...new Set(g.off[i])], extra: g.extra[i] });
+      }
       if (g.deficit[i] > 0) {
         issues.push({
           type: 'coverage', date: dateFromIndex(year, i), team: g.team, shift: g.shift,
@@ -145,6 +169,7 @@ function indexesInYear(year, start, end) {
 function issueKey(it) {
   switch (it.type) {
     case 'coverage': return `c|${it.date}|${it.team}|${it.shift}`;
+    case 'shiftmax': return `m|${it.date}|${it.team}|${it.shift}`;
     case 'blocked': return `b|${it.date}|${it.worker_id}`;
     case 'overlap': return `o|${it.worker_id}|${it.a.start}|${it.b.start}`;
     case 'overlimit': return `l|${it.worker_id}`;
@@ -154,6 +179,7 @@ function issueKey(it) {
 
 function issueSeverity(it) {
   if (it.type === 'coverage') return it.deficit;
+  if (it.type === 'shiftmax') return it.count;
   if (it.type === 'overlimit') return it.assigned;
   return 1;
 }
@@ -192,6 +218,8 @@ export function describeIssue(it, nameOf = (id) => `#${id}`) {
       const sup = it.extra ? ` (incluye ${it.extra} suplente${it.extra > 1 ? 's' : ''})` : '';
       return `${formatDate(it.date, { weekday: true })} · ${groupLabel(it.team, it.shift)}: se necesitan ${it.need} y solo habría ${it.available} disponible${it.available === 1 ? '' : 's'}${sup}.${who}`;
     }
+    case 'shiftmax':
+      return `${formatDate(it.date, { weekday: true })} · ${groupLabel(it.team, it.shift)}: no puede haber más de ${it.max} persona${it.max === 1 ? '' : 's'} de vacaciones a la vez en el turno y habría ${it.count} (${it.off.map(nameOf).join(', ')}).`;
     case 'blocked':
       return `${formatDate(it.date, { weekday: true })} es una fecha bloqueada${it.reason ? ` (${it.reason})` : ''} y ${nameOf(it.worker_id)} tendría vacaciones.`;
     case 'overlap':

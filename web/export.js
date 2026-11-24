@@ -91,12 +91,12 @@ export async function exportExcel(data) {
     if (!G.members.length) continue;
     const row = ws.getRow(r++);
     row.getCell(1).value = `Disponibles ${groupLabel(g.team, g.shift)}`;
-    row.getCell(2).value = 'disp./mín.';
+    row.getCell(2).value = 'trabajando/mín.';
     row.font = { size: 8 };
     for (let i = 0; i < N; i++) {
       const c = row.getCell(3 + i);
       c.value = `${G.available[i]}/${G.need[i]}`;
-      c.font = { size: 6, color: { argb: G.deficit[i] ? 'FFD9363E' : 'FF667085' } };
+      c.font = { size: 6, color: { argb: G.problem[i] ? 'FFD9363E' : 'FF667085' } };
     }
   }
 
