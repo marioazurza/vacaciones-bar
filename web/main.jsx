@@ -1,7 +1,7 @@
 import { render } from 'preact';
 import { useCallback, useEffect, useState } from 'preact/hooks';
 import { api, onSaved, runtime } from './api.js';
-import { Toasts, Modal, Field, Alert, run, showError, toast, ask } from './ui.jsx';
+import { Toasts, Modal, Field, Alert, run, showError, toast, ask, PasswordInput } from './ui.jsx';
 import { CalendarPage, MyVacationsPage, RequestsPage, TeamPage, GeneratorPage, SettingsPage, HistoryPage, SummaryPage } from './pages.jsx';
 import { todayISO } from '../shared/dates.js';
 import './styles.css';
@@ -42,7 +42,7 @@ function Login({ onLogin }) {
       <form class="card stack" onSubmit={submit}>
         <div class="brand" style="padding:0"><div class="brand-logo">🌴</div><div>Vacaciones del bar<div class="small muted" style="font-weight:400">Calendario del equipo</div></div></div>
         <Field label="Usuario"><input class="input" autoComplete="username" value={u} onInput={(e) => setU(e.currentTarget.value)} autoFocus /></Field>
-        <Field label="Contraseña"><input class="input" type="password" autoComplete="current-password" value={p} onInput={(e) => setP(e.currentTarget.value)} /></Field>
+        <Field label="Contraseña"><PasswordInput id="login-pw" autoComplete="current-password" value={p} onInput={(e) => setP(e.currentTarget.value)} /></Field>
         {err && <Alert kind="bad" title={err} />}
         <button class="btn primary" type="submit" style="justify-content:center">Entrar</button>
         {runtime.demo && (
@@ -93,8 +93,8 @@ function PasswordModal({ onClose }) {
   const save = async () => { if (await run(() => api('changePassword', { current: c, next: n }), 'Contraseña cambiada')) onClose(); };
   return (
     <Modal title="Cambiar contraseña" onClose={onClose} footer={<><button class="btn" onClick={onClose}>Cancelar</button><button class="btn primary" onClick={save}>Guardar</button></>}>
-      <Field label="Contraseña actual"><input class="input" type="password" value={c} onInput={(e) => setC(e.currentTarget.value)} /></Field>
-      <Field label="Nueva contraseña"><input class="input" type="password" value={n} onInput={(e) => setN(e.currentTarget.value)} /></Field>
+      <Field label="Contraseña actual"><PasswordInput autoComplete="current-password" value={c} onInput={(e) => setC(e.currentTarget.value)} /></Field>
+      <Field label="Nueva contraseña"><PasswordInput autoComplete="new-password" value={n} onInput={(e) => setN(e.currentTarget.value)} /></Field>
     </Modal>
   );
 }

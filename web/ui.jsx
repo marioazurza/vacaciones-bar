@@ -156,3 +156,14 @@ export function Progress({ parts }) {
     <div class="progress">{parts.map((p, i) => <div key={i} style={{ width: `${(p.value / Math.max(total, p.max || 0)) * 100}%`, background: p.color }} />)}</div>
   );
 }
+
+/** Campo de contraseña con botón para mostrarla u ocultarla. */
+export function PasswordInput({ value, onInput, autoComplete, id }) {
+  const [show, setShow] = useState(false);
+  return (
+    <span class="pw-wrap">
+      <input class="input" id={id} type={show ? 'text' : 'password'} autoComplete={autoComplete} value={value} onInput={onInput} />
+      <button type="button" class="pw-eye" aria-label={show ? 'Ocultar contraseña' : 'Mostrar contraseña'} title={show ? 'Ocultar contraseña' : 'Mostrar contraseña'} onClick={() => setShow(!show)}>{show ? '🙈' : '👁'}</button>
+    </span>
+  );
+}
