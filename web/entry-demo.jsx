@@ -8,10 +8,13 @@ import { start } from './main.jsx';
 
 const KEY = 'vacaciones-bar-demo-v1';
 const TOKEN = 'vacaciones-bar-demo-token';
+// Si el navegador no deja guardar (ventana privada, visor incrustado...), se usa memoria:
+// todo funciona igual, pero los datos se pierden al cerrar la página.
+const mem = new Map();
 const store = {
-  get(k) { try { return localStorage.getItem(k); } catch { return null; } },
-  set(k, v) { try { localStorage.setItem(k, v); } catch { /* sin almacenamiento: los datos duran hasta cerrar */ } },
-  del(k) { try { localStorage.removeItem(k); } catch { /* */ } },
+  get(k) { try { const v = localStorage.getItem(k); if (v != null) return v; } catch { /* */ } return mem.has(k) ? mem.get(k) : null; },
+  set(k, v) { mem.set(k, v); try { localStorage.setItem(k, v); } catch { /* sin almacenamiento */ } },
+  del(k) { mem.delete(k); try { localStorage.removeItem(k); } catch { /* */ } },
 };
 
 const repo = createMemoryRepo({
