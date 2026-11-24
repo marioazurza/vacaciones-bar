@@ -10,7 +10,8 @@ import { GROUPS, TEAMS, SHIFTS, groupLabel, describeIssue, describeMinimumRow, w
 // =============== CALENDARIO ===============
 export function CalendarPage({ data, reload, isAdmin, me }) {
   const thisMonth = data.today.startsWith(String(data.year)) ? monthOf(data.today) : 0;
-  const [view, setView] = useState(() => { try { return localStorage.getItem('vac-view') || 'year'; } catch { return 'year'; } });
+  // Siempre se abre en la vista mensual.
+  const [view, setView] = useState('month');
   const [filters, setFilters] = useState({ team: '', shift: '', worker: '' });
   const [m, setM] = useState(thisMonth);
   // Semana inicial: la actual si estamos en ese año; si no, la primera semana completa del año.
@@ -19,7 +20,6 @@ export function CalendarPage({ data, reload, isAdmin, me }) {
   const [day, setDay] = useState(null);
   const [edit, setEdit] = useState(null);
   const cal = useMemo(() => buildCal(data), [data]);
-  useEffect(() => { try { localStorage.setItem('vac-view', view); } catch { /* sin almacenamiento */ } }, [view]);
   useEffect(() => { setM(thisMonth); setWk(firstWeek()); }, [data.year]);
 
   if (!isAdmin && data.status !== 'publicado') {
