@@ -170,7 +170,7 @@ function TimelineView({ cal, filters, from, n, title, wide, onDay, onBar, onPick
       subs.forEach((x, k) => bar(`s${g.key}${k}`, r, x.start, x.end, `g-bar sub ${colorClass(g.team, g.shift)}`, wide ? `${x.note || 'Suplente'} · ${formatRange(x.start, x.end)}` : (x.note || 'Suplente'), `${x.note || 'Suplente'}: ${formatRange(x.start, x.end)}`, null));
     }
     const r = row++;
-    items.push(<div class="g-name small muted" style={{ gridRow: r, gridColumn: 1 }} key={`cv${g.key}`}>{byMax ? 'De vacaciones / máximo' : wide ? 'Trabajando / mínimo' : 'Disponibles / mínimo'}</div>);
+    items.push(<div class="g-name small muted" style={{ gridRow: r, gridColumn: 1 }} key={`cv${g.key}`}>{byMax ? ((cal.periodRules?.wholeTeam || []).includes(g.team) ? `Toda ${g.team === 'sala' ? 'la sala' : 'la cocina'} / máximo` : 'De vacaciones / máximo') : wide ? 'Trabajando / mínimo' : 'Disponibles / mínimo'}</div>);
     days.forEach((date, d) => {
       if (!inYear(date)) { items.push(<div key={`cv${g.key}${d}`} class="g-cov" style={{ gridRow: r, gridColumn: 2 + d }} />); return; }
       const i = dayIndex(date, cal.year);

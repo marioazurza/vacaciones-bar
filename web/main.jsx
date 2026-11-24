@@ -177,7 +177,7 @@ function Shell({ user, onLogout }) {
               <div class="popover" style="width:220px" onMouseLeave={() => setMenu(false)}>
                 <div class="notif"><b>{user.display}</b><div class="small muted">Usuario: {user.username}</div></div>
                 <button class="btn ghost" style="width:100%;justify-content:flex-start" onClick={() => { setMenu(false); setPw(true); }}>🔑 Cambiar contraseña</button>
-                <button class="btn ghost" style="width:100%;justify-content:flex-start" onClick={onLogout}>↩ Salir</button>
+                {!runtime.noLogin && <button class="btn ghost" style="width:100%;justify-content:flex-start" onClick={onLogout}>↩ Salir</button>}
               </div>
             )}
           </div>

@@ -12,7 +12,7 @@ import {
 import { generateProposal, generateRotation, DEFAULT_GENERATOR_SETTINGS } from './generator.js';
 import { formatRange, overlaps, periodLength, todayISO, isISODate, addDays } from './dates.js';
 
-export const DEFAULT_PERIOD_RULES = { periodLength: 15, maxOffPerShift: DEFAULT_MAX_OFF_PER_SHIFT };
+export const DEFAULT_PERIOD_RULES = { periodLength: 15, maxOffPerShift: DEFAULT_MAX_OFF_PER_SHIFT, wholeTeam: ['sala'] };
 
 export class ApiError extends Error {
   constructor(status, message, details = []) {
@@ -22,7 +22,8 @@ export class ApiError extends Error {
   }
 }
 
-const SEED_WORKERS = [
+// Trabajadores de ejemplo (los usan las pruebas).
+export const EXAMPLE_WORKERS = [
   ['Lucía', 'Martín Ortega', 'cocina', 'M'],
   ['Javier', 'Ruiz Delgado', 'cocina', 'M'],
   ['Carmen', 'Navarro Gil', 'cocina', 'T'],
@@ -35,6 +36,21 @@ const SEED_WORKERS = [
   ['Diego', 'Moreno Castillo', 'sala', 'T'],
   ['Nuria', 'Álvarez Rubio', 'sala', 'T'],
   ['Raúl', 'Iglesias Peña', 'sala', 'T'],
+];
+
+// Plantilla real del bar.
+export const BAR_WORKERS = [
+  ['Naima', 'Rija', 'cocina', 'M'],
+  ['Marco Antonio', 'Vega García', 'cocina', 'M'],
+  ['Diego', 'Céspedes Rodríguez', 'cocina', 'T'],
+  ['Josué', 'Castillo Ramírez', 'cocina', 'T'],
+  ['Amaia', 'Huegun Brocal', 'sala', 'M'],
+  ['Tania', 'Halyuk', 'sala', 'M'],
+  ['Gemma', 'Martínez Uria', 'sala', 'M'],
+  ['Lasha', 'Kabzinadze', 'sala', 'M'], // mixto: mañanas de miércoles y jueves, tarde del martes
+  ['Edar', 'Centeno González', 'sala', 'T'],
+  ['Gerardo', 'Intriago Mero', 'sala', 'T'],
+  ['Ayman', 'Rija', 'sala', 'T'],
 ];
 
 const slug = (s) => s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, '');
@@ -76,6 +92,7 @@ export function createService({ repo, hashPassword, verifyPassword, randomToken,
       reinforcements: over.reinforcements ?? repo.all('reinforcements'),
       blocked: over.blocked ?? repo.all('blocked', { year }),
       maxOffPerShift: over.maxOffPerShift !== undefined ? over.maxOffPerShift : periodRules().maxOffPerShift,
+      wholeTeam: over.wholeTeam ?? periodRules().wholeTeam ?? [],
     };
   }
 
@@ -88,7 +105,7 @@ export function createService({ repo, hashPassword, verifyPassword, randomToken,
       const nameOf = nameOfFn();
       const coverage = bad.some((i) => i.type === 'coverage');
       const shiftmax = bad.some((i) => i.type === 'shiftmax');
-      const msg = `${intro} ${coverage ? 'dejaría al bar por debajo de la cobertura mínima' : shiftmax ? 'habría demasiadas personas del mismo turno de vacaciones a la vez' : 'incumple las reglas'}${bad.length > 1 ? ` (${bad.length} conflictos)` : ''}.`;
+      const msg = `${intro} ${coverage ? 'dejaría al bar por debajo de la cobertura mínima' : shiftmax ? 'habría demasiadas personas de vacaciones a la vez' : 'incumple las reglas'}${bad.length > 1 ? ` (${bad.length} conflictos)` : ''}.`;
       throw new ApiError(409, msg, bad.slice(0, 12).map((i) => describeIssue(i, nameOf)).concat(bad.length > 12 ? [`… y ${bad.length - 12} más.`] : []));
     }
   }
@@ -121,7 +138,7 @@ export function createService({ repo, hashPassword, verifyPassword, randomToken,
   }
 
   // ---------- semilla inicial ----------
-  function seed({ adminUsername = 'admin', adminPassword = 'admin', workerPassword = '1234', withDemoPlan = true } = {}) {
+  function seed({ adminUsername = 'admin', adminPassword = 'admin', workerPassword = '1234', withDemoPlan = true, workers = BAR_WORKERS } = {}) {
     if (repo.all('users').length) return false;
     repo.tx(() => {
       const thisYear = Number(today().slice(0, 4));
@@ -132,10 +149,10 @@ export function createService({ repo, hashPassword, verifyPassword, randomToken,
       setSetting('periods', DEFAULT_PERIOD_RULES);
       repo.insert('years', { year: thisYear, status: 'publicado', published_at: now() });
       repo.insert('years', { year: planYear, status: 'borrador', published_at: null });
-      for (const [first, last, team, shift] of SEED_WORKERS) {
+      for (const [first, last, team, shift] of workers) {
         const w = repo.insert('workers', { first_name: first, last_name: last, created_at: now() });
         for (const year of [thisYear, planYear]) repo.insert('staff', { year, worker_id: w.id, team, shift, days: DEFAULT_ANNUAL_DAYS });
-        repo.insert('users', { username: slug(first), password_hash: hashPassword(workerPassword), role: 'worker', worker_id: w.id, created_at: now() });
+        repo.insert('users', { username: slug(first.split(' ')[0]), password_hash: hashPassword(workerPassword), role: 'worker', worker_id: w.id, created_at: now() });
       }
       if (withDemoPlan) {
         // Los dos años ya configurados con la rotación por turnos: 15 días seguidos por
@@ -146,7 +163,7 @@ export function createService({ repo, hashPassword, verifyPassword, randomToken,
           for (const v of prop.vacations) repo.insert('vacations', { ...v, year, note: 'Rotación por turnos', created_at: now() });
         }
       }
-      log(null, null, 'Inicio', 'Se crearon los 12 trabajadores de ejemplo y las vacaciones en rotación por turnos (15 días seguidos, máximo 1 por turno a la vez).');
+      log(null, null, 'Inicio', 'Se crearon los trabajadores del bar y las vacaciones en rotación (15 días seguidos; en sala como máximo 1 camarero a la vez y en cocina 1 por turno).');
     });
     return true;
   }
@@ -159,7 +176,7 @@ export function createService({ repo, hashPassword, verifyPassword, randomToken,
     const u = repo.get('users', s.user_id);
     if (!u) return null;
     const w = u.worker_id ? repo.get('workers', u.worker_id) : null;
-    return { id: u.id, username: u.username, role: u.role, worker_id: u.worker_id, display: u.role === 'admin' ? 'Administrador' : workerName(w) };
+    return { id: u.id, username: u.username, role: u.role, worker_id: u.worker_id, display: u.role === 'admin' ? u.username.charAt(0).toUpperCase() + u.username.slice(1) : workerName(w) };
   }
 
   const PUBLIC = new Set(['login']);
@@ -468,12 +485,13 @@ export function createService({ repo, hashPassword, verifyPassword, randomToken,
       if (L < 0 || L > 31) throw new ApiError(400, 'La duración debe estar entre 1 y 31 días, o 0 para dejarla libre.');
       let M = p.maxOffPerShift !== undefined ? (p.maxOffPerShift === null || p.maxOffPerShift === '' ? null : Math.floor(Number(p.maxOffPerShift))) : cur.maxOffPerShift;
       if (M != null && !(M >= 0 && M <= 10)) throw new ApiError(400, 'El máximo por turno debe estar entre 0 y 10.');
-      if (M !== cur.maxOffPerShift) {
-        for (const year of activeYears()) guard(year, { maxOffPerShift: M }, `No se puede aplicar ese máximo en ${year} porque el calendario actual`);
+      const W = p.wholeTeam !== undefined ? (Array.isArray(p.wholeTeam) ? p.wholeTeam.filter((t) => t === 'sala' || t === 'cocina') : []) : (cur.wholeTeam || []);
+      if (M !== cur.maxOffPerShift || W.join() !== (cur.wholeTeam || []).join()) {
+        for (const year of activeYears()) guard(year, { maxOffPerShift: M, wholeTeam: W }, `No se puede aplicar ese máximo en ${year} porque el calendario actual`);
       }
-      setSetting('periods', { periodLength: L, maxOffPerShift: M });
+      setSetting('periods', { periodLength: L, maxOffPerShift: M, wholeTeam: W });
       log(user, null, 'Reglas de vacaciones', `${L ? `Periodos de ${L} días seguidos` : 'Periodos de duración libre'} · ${M == null ? 'sin máximo por turno' : `máximo ${M} de vacaciones a la vez por turno`}.`);
-      return { periodLength: L, maxOffPerShift: M };
+      return { periodLength: L, maxOffPerShift: M, wholeTeam: W };
     },
 
     saveBlocked({ id, year, start, end, reason }, user) {

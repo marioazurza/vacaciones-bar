@@ -297,9 +297,11 @@ export function generateRotation(ctx, opts = {}) {
   const unassigned = {};
 
   const groups = {};
-  for (const s of ctx.staff) (groups[groupKey(s.team, s.shift)] ||= []).push(s);
+  // En los equipos que cuentan los dos turnos juntos, la cadena es una sola para todo el equipo.
+  const wholeTeams = new Set(ctx.wholeTeam || []);
+  for (const s of ctx.staff) (groups[wholeTeams.has(s.team) ? s.team : groupKey(s.team, s.shift)] ||= []).push(s);
   for (const [key, members] of Object.entries(groups)) {
-    const wanted = opts.order?.[key] || [];
+    const wanted = opts.order?.[key] || (wholeTeams.has(key) ? Object.keys(opts.order || {}).filter((k) => k.startsWith(`${key}-`)).flatMap((k) => opts.order[k]) : []);
     const ordered = [...members].sort((a, b) => {
       const ia = wanted.indexOf(a.worker_id), ib = wanted.indexOf(b.worker_id);
       return (ia < 0 ? 999 : ia) - (ib < 0 ? 999 : ib) || a.name.localeCompare(b.name);

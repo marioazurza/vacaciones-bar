@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { openRepo } from '../server/db.js';
-import { createService, ApiError } from '../shared/service.js';
+import { createService, ApiError, EXAMPLE_WORKERS, BAR_WORKERS } from '../shared/service.js';
 import { DEFAULT_MINIMUMS } from '../shared/rules.js';
 
 function setup({ periodLength = 0, legacy = true } = {}) {
@@ -14,7 +14,8 @@ function setup({ periodLength = 0, legacy = true } = {}) {
     randomToken: () => `t${++n}`,
     today: () => '2026-11-24',
   });
-  service.seed({ withDemoPlan: false });
+  service.seed({ withDemoPlan: false, workers: EXAMPLE_WORKERS });
+  service.call(service.call(null, 'login', { username: 'admin', password: 'admin' }).token, 'savePeriodRules', { wholeTeam: [] });
   const login = (u, p) => service.call(null, 'login', { username: u, password: p }).token;
   const admin = login('admin', 'admin');
   service.call(admin, 'savePeriodRules', { periodLength });
@@ -155,7 +156,7 @@ test('regla actual: 15 días seguidos y máximo 1 de vacaciones a la vez por tur
   const cook = d.staff.find((s) => s.team === 'cocina');
   service.call(admin, 'saveVacation', { year: 2027, worker_id: a.worker_id, start: '2027-03-01', end: '2027-03-15' });
   const e = err(() => service.call(admin, 'saveVacation', { year: 2027, worker_id: b.worker_id, start: '2027-03-10', end: '2027-03-24' }));
-  assert.match(e.message, /mismo turno/);
+  assert.match(e.message, /a la vez/);
   // Otro turno sí puede coincidir, y un cocinero puede librar en fin de semana
   service.call(admin, 'saveVacation', { year: 2027, worker_id: cook.worker_id, start: '2027-03-01', end: '2027-03-15' });
   service.call(admin, 'saveGeneratorSettings', { settings: { strategy: 'equilibrado' } });
@@ -181,4 +182,35 @@ test('rotación: en cada turno, uno detrás de otro sin huecos', () => {
     if (!spread) assert.equal(Date.parse(chain[4].start) - Date.parse(chain[3].end), 864e5);
     service.call(admin, 'applyProposal', { year: 2027, vacations: prop.vacations, replace: true });
   }
+});
+
+test('plantilla del bar: en sala nunca más de un camarero de vacaciones a la vez (mañana y tarde juntas)', () => {
+  const repo = openRepo(':memory:');
+  let n = 0;
+  const service = createService({ repo, hashPassword: (p) => `x:${p}`, verifyPassword: (p, h) => h === `x:${p}`, randomToken: () => `t${++n}`, today: () => '2026-11-24' });
+  service.seed({ workers: BAR_WORKERS });
+  const admin = service.call(null, 'login', { username: 'admin', password: 'admin' }).token;
+  const d = service.call(admin, 'getYear', { year: 2027 });
+  assert.equal(d.staff.length, 11);
+  assert.deepEqual(d.periodRules.wholeTeam, ['sala']);
+  const sala = new Set(d.staff.filter((s) => s.team === 'sala').map((s) => s.worker_id));
+  const days = new Map();
+  for (const v of d.vacations) {
+    if (!sala.has(v.worker_id)) continue;
+    for (let x = new Date(v.start); x <= new Date(v.end); x.setUTCDate(x.getUTCDate() + 1)) {
+      const k = x.toISOString().slice(0, 10);
+      assert.ok(!days.has(k), `dos camareros de vacaciones el ${k}`);
+      days.set(k, v.worker_id);
+    }
+  }
+  assert.equal(days.size, 7 * 30);
+  // Un camarero de mañana y otro de tarde a la vez: se rechaza.
+  const m = d.staff.find((s) => s.team === 'sala' && s.shift === 'M');
+  const t = d.staff.find((s) => s.team === 'sala' && s.shift === 'T');
+  service.call(admin, 'clearVacations', { year: 2027 });
+  service.call(admin, 'saveVacation', { year: 2027, worker_id: m.worker_id, start: '2027-12-01', end: '2027-12-15' });
+  err(() => service.call(admin, 'saveVacation', { year: 2027, worker_id: t.worker_id, start: '2027-12-10', end: '2027-12-24' }));
+  // Con un cocinero sí puede coincidir.
+  const c = d.staff.find((s) => s.team === 'cocina');
+  service.call(admin, 'saveVacation', { year: 2027, worker_id: c.worker_id, start: '2027-12-01', end: '2027-12-15' });
 });

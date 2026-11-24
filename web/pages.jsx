@@ -513,6 +513,11 @@ function PeriodCard({ data, reload }) {
           {M !== data.periodRules?.maxOffPerShift && <button class="btn primary sm" onClick={() => saveM(M)}>Guardar</button>}
         </div>
       )}
+      {hasMax && ['sala', 'cocina'].map((t) => {
+        const W = data.periodRules?.wholeTeam || [];
+        const on = W.includes(t);
+        return <label class="row" key={t}><input type="checkbox" checked={on} onChange={async (e) => (await run(() => api('savePeriodRules', { wholeTeam: e.currentTarget.checked ? [...W, t] : W.filter((x) => x !== t) }), 'Guardado')) && reload()} /> En {t === 'sala' ? 'sala (camareros)' : 'cocina'}, contar mañana y tarde juntas: el máximo es para todo el equipo, no para cada turno</label>;
+      })}
       <hr style="border:none;border-top:1px solid var(--border);margin:4px 0" />
       <label class="row"><input type="checkbox" checked={fixed} onChange={(e) => { const v = e.currentTarget.checked ? 15 : 0; setL(v); save(v); }} /> Todos los periodos tienen la misma duración</label>
       {fixed && (

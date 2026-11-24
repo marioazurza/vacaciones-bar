@@ -6,7 +6,7 @@ import { createService, ApiError } from '../shared/service.js';
 import { createMemoryRepo } from '../shared/memrepo.js';
 import { start } from './main.jsx';
 
-const KEY = 'vacaciones-bar-demo-v4';
+const KEY = 'vacaciones-bar-demo-v5';
 const TOKEN = 'vacaciones-bar-demo-token-v4';
 // Si el navegador no deja guardar (ventana privada, visor incrustado...), se usa memoria:
 // todo funciona igual, pero los datos se pierden al cerrar la página.
@@ -50,7 +50,10 @@ for (const u of repo.all('users', { role: 'worker' })) {
 setTransport(async (action, params) => {
   await new Promise((r) => setTimeout(r, 0));
   try {
+    // Sin pantalla de acceso (de momento): se entra directamente como administrador.
+    if (!service.userFromToken(store.get(TOKEN))) store.set(TOKEN, service.call(null, 'login', ADMIN).token);
     const token = store.get(TOKEN);
+    if (action === 'logout') return { ok: true };
     const res = service.call(token, action, params ? JSON.parse(JSON.stringify(params)) : {});
     if (action === 'login') { store.set(TOKEN, res.token); return { user: res.user }; }
     if (action === 'logout') store.del(TOKEN);
@@ -59,7 +62,7 @@ setTransport(async (action, params) => {
     if (e instanceof ApiError) { const x = new Error(e.message); x.status = e.status; x.details = e.details; throw x; }
     throw e;
   }
-}, { demo: true, demoUsers, noDownloads: window.self !== window.top });
+}, { demo: true, noLogin: true, demoUsers, noDownloads: window.self !== window.top });
 
 window.resetDemo = () => { store.del(KEY); store.del(TOKEN); location.reload(); };
 start();

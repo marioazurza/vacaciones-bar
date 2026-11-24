@@ -12,10 +12,10 @@ npm run build      # compila la interfaz
 npm start          # http://localhost:3000
 ```
 
-La primera vez se crea la base de datos `data/vacaciones.db` (SQLite) con los 12 trabajadores de ejemplo.
+La primera vez se crea la base de datos `data/vacaciones.db` (SQLite) con la plantilla del bar.
 
 - Administrador: usuario `admin`, contraseña `admin`, salvo que antes del primer arranque pongas las variables `ADMIN_USERNAME` y `ADMIN_PASSWORD`. **Cámbiala nada más entrar.**
-- Trabajadores: usuario = nombre en minúsculas sin acentos (`lucia`, `javier`, `marta`…), contraseña `1234`. Se cambian desde «Equipo».
+- Trabajadores: usuario = nombre en minúsculas sin acentos (`naima`, `marco`, `amaia`…), contraseña `1234`. Se cambian desde «Equipo».
 
 Variables de entorno: `PORT` (puerto), `DB_FILE` (ruta de la base de datos), `ADMIN_USERNAME`, `ADMIN_PASSWORD`.
 

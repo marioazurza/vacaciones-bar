@@ -124,7 +124,18 @@ export function analyze(ctx) {
   }
 
   const maxOff = ctx.maxOffPerShift == null || ctx.maxOffPerShift === '' ? null : Number(ctx.maxOffPerShift);
+  // Equipos en los que el máximo cuenta los dos turnos juntos (p. ej. en sala solo
+  // puede haber un camarero de vacaciones, sea de mañana o de tarde).
+  const wholeTeams = new Set(ctx.wholeTeam || []);
+  const teamOff = {}, teamExtra = {};
+  for (const team of wholeTeams) {
+    const gs = Object.values(groups).filter((g) => g.team === team);
+    teamOff[team] = Array.from({ length: N }, (_, i) => [...new Set(gs.flatMap((g) => g.off[i]))]);
+    teamExtra[team] = Array.from({ length: N }, (_, i) => gs.reduce((a, g) => a + g.extra[i], 0));
+  }
+  const teamIssue = new Set();
   for (const g of Object.values(groups)) {
+    const whole = wholeTeams.has(g.team);
     g.available = new Array(N);
     g.deficit = new Array(N);
     g.allowedOff = new Array(N);
@@ -138,12 +149,15 @@ export function analyze(ctx) {
       g.offCount[i] = offCount;
       g.available[i] = g.members.length - offCount + g.extra[i];
       g.deficit[i] = Math.max(0, g.need[i] - g.available[i]);
-      g.allowedOff[i] = maxOff == null ? Infinity : maxOff + g.extra[i];
-      g.over[i] = Math.max(0, offCount - g.allowedOff[i]);
-      g.room[i] = Math.min(g.available[i] - g.need[i], g.allowedOff[i] - offCount);
+      const poolOff = whole ? teamOff[g.team][i] : [...new Set(g.off[i])];
+      if (whole) g.offCount[i] = poolOff.length;
+      g.allowedOff[i] = maxOff == null ? Infinity : maxOff + (whole ? teamExtra[g.team][i] : g.extra[i]);
+      g.over[i] = Math.max(0, poolOff.length - g.allowedOff[i]);
+      g.room[i] = Math.min(g.available[i] - g.need[i], g.allowedOff[i] - poolOff.length);
       g.problem[i] = g.deficit[i] || g.over[i];
-      if (g.over[i] > 0) {
-        issues.push({ type: 'shiftmax', date: dateFromIndex(year, i), team: g.team, shift: g.shift, max: g.allowedOff[i], count: offCount, off: [...new Set(g.off[i])], extra: g.extra[i] });
+      if (g.over[i] > 0 && !(whole && teamIssue.has(`${g.team}|${i}`))) {
+        if (whole) teamIssue.add(`${g.team}|${i}`);
+        issues.push({ type: 'shiftmax', date: dateFromIndex(year, i), team: g.team, shift: whole ? null : g.shift, max: g.allowedOff[i], count: poolOff.length, off: poolOff, extra: whole ? teamExtra[g.team][i] : g.extra[i] });
       }
       if (g.deficit[i] > 0) {
         issues.push({
@@ -220,7 +234,7 @@ export function describeIssue(it, nameOf = (id) => `#${id}`) {
       return `${formatDate(it.date, { weekday: true })} · ${groupLabel(it.team, it.shift)}: se necesitan ${it.need} y solo habría ${it.available} disponible${it.available === 1 ? '' : 's'}${sup}.${who}`;
     }
     case 'shiftmax':
-      return `${formatDate(it.date, { weekday: true })} · ${groupLabel(it.team, it.shift)}: no puede haber más de ${it.max} persona${it.max === 1 ? '' : 's'} de vacaciones a la vez en el turno y habría ${it.count} (${it.off.map(nameOf).join(', ')}).`;
+      return `${formatDate(it.date, { weekday: true })} · ${it.shift ? groupLabel(it.team, it.shift) : TEAMS[it.team]}: no puede haber más de ${it.max} persona${it.max === 1 ? '' : 's'} de vacaciones a la vez ${it.shift ? 'en el turno' : `en ${it.team === 'sala' ? 'sala (mañana y tarde juntas)' : 'el equipo'}`} y habría ${it.count} (${it.off.map(nameOf).join(', ')}).`;
     case 'blocked':
       return `${formatDate(it.date, { weekday: true })} es una fecha bloqueada${it.reason ? ` (${it.reason})` : ''} y ${nameOf(it.worker_id)} tendría vacaciones.`;
     case 'overlap':
