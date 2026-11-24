@@ -67,7 +67,7 @@ h3 { font-size: 15px; font-weight: 650; }
 .nav-item .ico { width: 20px; text-align: center; }
 .nav-badge { margin-left: auto; background: var(--bad); color: #fff; border-radius: 99px; font-size: 11px; padding: 1px 7px; font-weight: 700; }
 .main { min-width: 0; display: flex; flex-direction: column; }
-.topbar { position: sticky; top: 0; z-index: 20; background: color-mix(in srgb, var(--bg) 88%, transparent); backdrop-filter: blur(8px); border-bottom: 1px solid var(--border); padding: 10px 24px; display: flex; gap: 12px; align-items: center; }
+.topbar { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 20; background: color-mix(in srgb, var(--bg) 88%, transparent); backdrop-filter: blur(8px); border-bottom: 1px solid var(--border); padding: 10px 24px; display: flex; gap: 12px; align-items: center; }
 .content { padding: 20px 24px 40px; display: flex; flex-direction: column; gap: 18px; max-width: 1500px; width: 100%; }
 .bottom-nav { display: none; }
 

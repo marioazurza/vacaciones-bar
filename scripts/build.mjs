@@ -41,5 +41,7 @@ await build({ ...common, entryPoints: { demo: 'web/entry-demo.jsx' }, outdir: 'd
 const js = readFileSync('dist-demo/tmp/demo.js', 'utf8').replace(/<\/script/gi, '<\\/script');
 const css = readFileSync('dist-demo/tmp/demo.css', 'utf8');
 writeFileSync('dist-demo/vacaciones-demo.html', html(`<script>${js}</script>`, `<style>${css}</style>`));
+// Variante para publicar como página de claude.ai (sin esqueleto html/head/body propio)
+writeFileSync('dist-demo/artifact.html', `<title>Vacaciones del bar</title>\n<style>${css}</style>\n<div id="app"></div>\n<script>${js}</script>\n`);
 rmSync('dist-demo/tmp', { recursive: true, force: true });
 console.log('Compilado: dist/ y dist-demo/vacaciones-demo.html');

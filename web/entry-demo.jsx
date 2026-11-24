@@ -44,7 +44,7 @@ setTransport(async (action, params) => {
     if (e instanceof ApiError) { const x = new Error(e.message); x.status = e.status; x.details = e.details; throw x; }
     throw e;
   }
-}, { demo: true, demoUsers });
+}, { demo: true, demoUsers, noDownloads: window.self !== window.top });
 
 window.resetDemo = () => { store.del(KEY); store.del(TOKEN); location.reload(); };
 start();

@@ -51,6 +51,7 @@ function Login({ onLogin }) {
             <div class="demo-users">
               {runtime.demoUsers.map((d) => <button type="button" key={d.username} class={`btn sm ${d.username === 'admin' ? 'primary' : ''}`} onClick={() => submit(null, d.username, d.password)}>{d.label}</button>)}
             </div>
+            <button type="button" class="btn ghost sm" onClick={() => window.resetDemo?.()}>↺ Borrar los datos de prueba y empezar de cero</button>
           </div>
         )}
       </form>
@@ -152,7 +153,7 @@ function Shell({ user, onLogout }) {
       <aside class="sidebar">
         <div class="brand"><div class="brand-logo">🌴</div>Vacaciones</div>
         {nav.map(([k, ico, t]) => (
-          <a key={k} href={`#/${k}`} class={`nav-item ${page === k ? 'active' : ''}`}><span class="ico">{ico}</span>{t}{k === 'solicitudes' && pendingBadge > 0 && <span class="nav-badge">{pendingBadge}</span>}</a>
+          <a key={k} href={`#${k}`} class={`nav-item ${page === k ? 'active' : ''}`}><span class="ico">{ico}</span>{t}{k === 'solicitudes' && pendingBadge > 0 && <span class="nav-badge">{pendingBadge}</span>}</a>
         ))}
         <span class="spacer" />
         <div class="small muted" style="padding:8px">{user.display}<br />{isAdmin ? 'Administrador' : 'Trabajador'}</div>
@@ -184,9 +185,9 @@ function Shell({ user, onLogout }) {
       </div>
       <nav class="bottom-nav">
         {nav.slice(0, 5).map(([k, ico, t]) => (
-          <a key={k} href={`#/${k}`} class={page === k ? 'active' : ''}><span class="ico">{ico}</span>{t}{k === 'solicitudes' && pendingBadge > 0 && <span class="nav-badge">{pendingBadge}</span>}</a>
+          <a key={k} href={`#${k}`} class={page === k ? 'active' : ''}><span class="ico">{ico}</span>{t}{k === 'solicitudes' && pendingBadge > 0 && <span class="nav-badge">{pendingBadge}</span>}</a>
         ))}
-        {nav.length > 5 && <a href={`#/${nav[5][0]}`} class={['ajustes', 'historial'].includes(page) ? 'active' : ''}><span class="ico">⋯</span>Más</a>}
+        {nav.length > 5 && <a href={`#${nav[5][0]}`} class={['ajustes', 'historial'].includes(page) ? 'active' : ''}><span class="ico">⋯</span>Más</a>}
       </nav>
       {pw && <PasswordModal onClose={() => setPw(false)} />}
     </div>

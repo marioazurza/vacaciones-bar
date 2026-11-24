@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'preact/hooks';
-import { api } from './api.js';
+import { api, runtime } from './api.js';
 import { Modal, Alert, Field, Stat, StatusBadge, GroupDot, Legend, run, toast, ask } from './ui.jsx';
 import { YearView, MonthView, WeekView, DayModal, Filters, weekStart } from './calendar.jsx';
 import { VacationModal, ChangeRequestModal, SwapModal, PreferenceModal } from './editors.jsx';
@@ -394,7 +394,7 @@ export function SettingsPage({ data, reload }) {
 
   return (
     <>
-      <div class="row"><h1>Ajustes</h1><span class="spacer" /><a class="btn sm" href="#/historial">🕘 Historial de cambios</a></div>
+      <div class="row"><h1>Ajustes</h1><span class="spacer" /><a class="btn sm" href="#historial">🕘 Historial de cambios</a></div>
       <div class="card">
         <div class="card-head"><h2>Mínimos de cobertura</h2><span class="spacer" />
           {changed && <button class="btn" onClick={() => setMins(data.minimums)}>Deshacer</button>}
@@ -493,6 +493,7 @@ export function SummaryPage({ data }) {
   let fullDays = 0;
   for (let i = 0; i < cal.analysis.N; i++) if (GROUPS.some((g) => { const G = cal.analysis.groups[g.key]; return G.members.length && G.available[i] <= G.need[i]; })) fullDays++;
   const exp = async (kind) => {
+    if (runtime.noDownloads) { toast('En esta versión de prueba no se pueden descargar archivos. En la aplicación instalada, este botón descarga el Excel o el PDF.'); return; }
     setBusy(kind);
     try {
       const mod = await import('./export.js');
