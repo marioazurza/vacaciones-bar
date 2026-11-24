@@ -13,12 +13,14 @@ export function CalendarPage({ data, reload, isAdmin, me }) {
   const [view, setView] = useState(() => { try { return localStorage.getItem('vac-view') || 'year'; } catch { return 'year'; } });
   const [filters, setFilters] = useState({ team: '', shift: '', worker: '' });
   const [m, setM] = useState(thisMonth);
-  const [wk, setWk] = useState(weekStart(data.today.startsWith(String(data.year)) ? data.today : `${data.year}-01-01`));
+  // Semana inicial: la actual si estamos en ese año; si no, la primera semana completa del año.
+  const firstWeek = () => (data.today.startsWith(String(data.year)) ? weekStart(data.today) : weekStart(addDays(`${data.year}-01-01`, 6)));
+  const [wk, setWk] = useState(firstWeek);
   const [day, setDay] = useState(null);
   const [edit, setEdit] = useState(null);
   const cal = useMemo(() => buildCal(data), [data]);
   useEffect(() => { try { localStorage.setItem('vac-view', view); } catch { /* sin almacenamiento */ } }, [view]);
-  useEffect(() => { setM(thisMonth); setWk(weekStart(data.today.startsWith(String(data.year)) ? data.today : `${data.year}-01-01`)); }, [data.year]);
+  useEffect(() => { setM(thisMonth); setWk(firstWeek()); }, [data.year]);
 
   if (!isAdmin && data.status !== 'publicado') {
     return <div class="card empty"><h2>El calendario de {data.year} aún no está publicado</h2><p>Cuando el administrador lo publique podrás consultarlo aquí. Mientras tanto puedes indicar tus fechas preferidas en «Mis vacaciones».</p></div>;

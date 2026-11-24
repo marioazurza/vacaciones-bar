@@ -103,7 +103,7 @@ function TimelineView({ cal, filters, from, n, title, wide, onDay, onBar, onPick
   const inYear = (d) => d >= yStart && d <= yEnd;
   const days = Array.from({ length: n }, (_, k) => addDays(from, k));
   const staff = applyFilters(cal.staff, filters);
-  const cols = wide ? `minmax(140px, 190px) repeat(${n}, minmax(96px, 1fr))` : `minmax(150px, 190px) repeat(${n}, minmax(32px, 1fr))`;
+  const cols = wide ? `minmax(110px, 190px) repeat(${n}, minmax(72px, 1fr))` : `minmax(150px, 190px) repeat(${n}, minmax(32px, 1fr))`;
   const col = (date) => 2 + diffDays(from, date);
   // Si hay máximo por turno y ningún mínimo, la fila resumen muestra cuántos faltan.
   const byMax = Object.values(cal.analysis.groups).some((G) => Number.isFinite(G.allowedOff[0])) && Object.values(cal.minimums).every((t) => Object.values(t).every((row) => row.every((x) => x === 0)));
@@ -174,7 +174,7 @@ function TimelineView({ cal, filters, from, n, title, wide, onDay, onBar, onPick
       if (!inYear(date)) { items.push(<div key={`cv${g.key}${d}`} class="g-cov" style={{ gridRow: r, gridColumn: 2 + d }} />); return; }
       const i = dayIndex(date, cal.year);
       const cls = G.problem[i] > 0 ? 'bad' : G.room[i] <= 0 && G.off[i].length ? 'full' : 'ok';
-      const txt = byMax ? (wide ? `${G.offCount[i]} de ${G.allowedOff[i]} fuera` : `${G.offCount[i]}/${G.allowedOff[i]}`) : (wide ? `${G.available[i]} de ${G.need[i]}` : `${G.available[i]}/${G.need[i]}`);
+      const txt = byMax ? (wide ? `${G.offCount[i]} de ${G.allowedOff[i]}` : `${G.offCount[i]}/${G.allowedOff[i]}`) : (wide ? `${G.available[i]} de ${G.need[i]}` : `${G.available[i]}/${G.need[i]}`);
       items.push(<div key={`cv${g.key}${d}`} class={`g-cov ${cls}`} style={{ gridRow: r, gridColumn: 2 + d }} onClick={() => onDay(date)} title="Ver el día">{txt}</div>);
     });
   }

@@ -204,7 +204,7 @@ table.table { width: 100%; border-collapse: collapse; }
 .g-head b { display: block; font-size: 13px; color: var(--text); }
 .g-head.we { background: var(--weekend); }
 .g-head.today b { color: #fff; background: var(--primary); border-radius: 99px; width: 22px; height: 22px; line-height: 22px; margin: 0 auto; }
-.gantt.wide { min-width: 860px; width: 100%; }
+.gantt.wide { min-width: 640px; width: 100%; }
 .gantt.wide .g-head { font-size: 12px; padding: 6px 0; }
 .gantt.wide .g-cell, .gantt.wide .g-name { min-height: 44px; }
 .gantt.wide .g-bar { font-size: 13px; min-height: 32px; }
