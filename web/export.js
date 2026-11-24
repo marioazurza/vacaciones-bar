@@ -7,7 +7,7 @@ import { GROUPS, groupLabel, workerStats } from '../shared/rules.js';
 import { buildCal } from './model.js';
 
 const COLORS = {
-  'cocina-M': { strong: 'D6452F', soft: 'FBE3D5' },
+  'cocina-M': { strong: 'B45309', soft: 'FBE3D5' },
   'cocina-T': { strong: '3F63D6', soft: 'DFE6FB' },
   'sala-M': { strong: 'E0A800', soft: 'FAEFD2' },
   'sala-T': { strong: '8A5CD6', soft: 'ECE3FB' },

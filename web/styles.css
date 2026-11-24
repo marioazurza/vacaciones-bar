@@ -14,7 +14,7 @@
   --bad: #d9363e;
   --bad-soft: #fde6e7;
   /* Turno de mañana: tonos cálidos. Turno de tarde: tonos fríos. */
-  --cocina-m: #d6452f;
+  --cocina-m: #b45309;
   --cocina-m-soft: #fbe3d5;
   --sala-m: #e0a800;
   --sala-m-soft: #faefd2;
@@ -36,14 +36,14 @@
   :root:not([data-theme="light"]) {
     --bg: #12151b; --surface: #1a1e26; --surface-2: #222733; --border: #2e3442; --text: #e7eaf0; --muted: #9aa3b5;
     --primary: #6b9bff; --primary-soft: #1f2b45; --ok: #48c08a; --ok-soft: #173327; --warn: #e6b04a; --warn-soft: #3a2f16;
-    --bad: #ff6b72; --bad-soft: #3d1c20; --cocina-m: #f26b55; --cocina-m-soft: #43281a; --sala-m: #e8b53c; --sala-m-soft: #3b3014; --cocina-t: #7d98f5; --cocina-t-soft: #1d2747; --sala-t: #ac8cf2; --sala-t-soft: #2c2449; --morning: #f5b544; --morning-soft: #2d2412; --evening: #8b85f5; --evening-soft: #1e1d3d;
+    --bad: #ff6b72; --bad-soft: #3d1c20; --cocina-m: #d9822b; --cocina-m-soft: #43281a; --sala-m: #e8b53c; --sala-m-soft: #3b3014; --cocina-t: #7d98f5; --cocina-t-soft: #1d2747; --sala-t: #ac8cf2; --sala-t-soft: #2c2449; --morning: #f5b544; --morning-soft: #2d2412; --evening: #8b85f5; --evening-soft: #1e1d3d;
     --weekend: #1f2229; color-scheme: dark;
   }
 }
 :root[data-theme="dark"] {
   --bg: #12151b; --surface: #1a1e26; --surface-2: #222733; --border: #2e3442; --text: #e7eaf0; --muted: #9aa3b5;
   --primary: #6b9bff; --primary-soft: #1f2b45; --ok: #48c08a; --ok-soft: #173327; --warn: #e6b04a; --warn-soft: #3a2f16;
-  --bad: #ff6b72; --bad-soft: #3d1c20; --cocina-m: #f26b55; --cocina-m-soft: #43281a; --sala-m: #e8b53c; --sala-m-soft: #3b3014; --cocina-t: #7d98f5; --cocina-t-soft: #1d2747; --sala-t: #ac8cf2; --sala-t-soft: #2c2449; --morning: #f5b544; --morning-soft: #2d2412; --evening: #8b85f5; --evening-soft: #1e1d3d;
+  --bad: #ff6b72; --bad-soft: #3d1c20; --cocina-m: #d9822b; --cocina-m-soft: #43281a; --sala-m: #e8b53c; --sala-m-soft: #3b3014; --cocina-t: #7d98f5; --cocina-t-soft: #1d2747; --sala-t: #ac8cf2; --sala-t-soft: #2c2449; --morning: #f5b544; --morning-soft: #2d2412; --evening: #8b85f5; --evening-soft: #1e1d3d;
     --weekend: #1f2229; color-scheme: dark;
 }
 
