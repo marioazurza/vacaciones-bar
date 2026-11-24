@@ -169,7 +169,8 @@ export function createService({ repo, hashPassword, verifyPassword, randomToken,
   const actions = {
     login({ username, password }) {
       const u = repo.all('users', { username: String(username || '').trim().toLowerCase() })[0];
-      if (!u || !verifyPassword(String(password || ''), u.password_hash)) throw new ApiError(401, 'Usuario o contraseña incorrectos.');
+      const pw = String(password || '');
+      if (!u || !(verifyPassword(pw, u.password_hash) || (pw !== pw.trim() && verifyPassword(pw.trim(), u.password_hash)))) throw new ApiError(401, 'Usuario o contraseña incorrectos.');
       const token = randomToken();
       repo.insert('sessions', { token, user_id: u.id, created_at: now() });
       return { token, user: userFromToken(token) };

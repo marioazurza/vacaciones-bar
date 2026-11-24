@@ -162,7 +162,7 @@ export function PasswordInput({ value, onInput, autoComplete, id }) {
   const [show, setShow] = useState(false);
   return (
     <span class="pw-wrap">
-      <input class="input" id={id} type={show ? 'text' : 'password'} autoComplete={autoComplete} value={value} onInput={onInput} />
+      <input class="input" id={id} type={show ? 'text' : 'password'} autoComplete={autoComplete} autoCapitalize="none" autoCorrect="off" spellcheck={false} value={value} onInput={onInput} />
       <button type="button" class="pw-eye" aria-label={show ? 'Ocultar contraseña' : 'Mostrar contraseña'} title={show ? 'Ocultar contraseña' : 'Mostrar contraseña'} onClick={() => setShow(!show)}>{show ? '🙈' : '👁'}</button>
     </span>
   );

@@ -39,12 +39,13 @@ function Login({ onLogin }) {
   };
   return (
     <div class="login">
-      <form class="card stack" onSubmit={submit}>
+      {/* Sin <form> nativo: algunos visores incrustados bloquean el envío de formularios. */}
+      <div class="card stack" onKeyDown={(e) => { if (e.key === 'Enter' && e.target.tagName === 'INPUT') submit(e); }}>
         <div class="brand" style="padding:0"><div class="brand-logo">🌴</div><div>Vacaciones del bar<div class="small muted" style="font-weight:400">Calendario del equipo</div></div></div>
-        <Field label="Usuario"><input class="input" autoComplete="username" value={u} onInput={(e) => setU(e.currentTarget.value)} autoFocus /></Field>
+        <Field label="Usuario"><input class="input" autoComplete="username" autoCapitalize="none" autoCorrect="off" spellcheck={false} value={u} onInput={(e) => setU(e.currentTarget.value)} autoFocus /></Field>
         <Field label="Contraseña"><PasswordInput id="login-pw" autoComplete="current-password" value={p} onInput={(e) => setP(e.currentTarget.value)} /></Field>
         {err && <Alert kind="bad" title={err} />}
-        <button class="btn primary" type="submit" style="justify-content:center">Entrar</button>
+        <button class="btn primary" type="button" id="login-btn" style="justify-content:center" onClick={submit}>Entrar</button>
         {runtime.demo && (
           <div class="stack" style="gap:6px">
             <div class="small muted">Versión de prueba: el administrador entra con su usuario y contraseña. Para ver la app como un trabajador, entra con un clic:</div>
@@ -54,7 +55,7 @@ function Login({ onLogin }) {
             <button type="button" class="btn ghost sm" onClick={() => window.resetDemo?.()}>↺ Borrar los datos de prueba y empezar de cero</button>
           </div>
         )}
-      </form>
+      </div>
     </div>
   );
 }
