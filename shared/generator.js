@@ -285,6 +285,115 @@ export function generateProposal(ctx, opts = {}) {
  *  - spread=true: cada ronda empieza en una parte distinta del año (p. ej. enero y julio).
  */
 export function generateRotation(ctx, opts = {}) {
+  if (opts.spread) return generateRotationSpread(ctx, opts);
+  const year = ctx.year;
+  const N = daysInYear(year);
+  const L = Number(opts.periodLength) || 15;
+  const base = analyze({ ...ctx, vacations: [] });
+  let start = opts.start && opts.start.startsWith(String(year)) ? opts.start : `${year}-01-01`;
+  if (opts.notBefore && opts.notBefore > start) start = opts.notBefore;
+  const s0 = dayIndex(start, year);
+  const blocked = base.blockedDay.map((b) => !!b);
+  const free = (a) => { if (a < s0 || a + L > N) return false; for (let i = a; i < a + L; i++) if (blocked[i]) return false; return true; };
+  const vacations = [];
+  const unassigned = {};
+
+  // "Grupos de rotación": en un equipo que cuenta los dos turnos juntos (sala) hay una sola
+  // cadena; si no, una por turno. Los grupos del mismo equipo van en paralelo (en cocina,
+  // el de mañana y el de tarde pueden coincidir) y los equipos van uno detrás de otro, para
+  // que un camarero y un cocinero no estén de vacaciones a la vez siempre que se pueda.
+  const wholeTeams = new Set(ctx.wholeTeam || []);
+  const pools = {};
+  for (const s of ctx.staff) (pools[wholeTeams.has(s.team) ? s.team : groupKey(s.team, s.shift)] ||= { team: s.team, members: [] }).members.push(s);
+  const lanes = {};
+  for (const [key, pool] of Object.entries(pools)) {
+    const wanted = opts.order?.[key] || (wholeTeams.has(key) ? Object.keys(opts.order || {}).filter((k) => k.startsWith(`${key}-`)).flatMap((k) => opts.order[k]) : []);
+    const ordered = [...pool.members].sort((a, b) => {
+      const ia = wanted.indexOf(a.worker_id), ib = wanted.indexOf(b.worker_id);
+      return (ia < 0 ? 999 : ia) - (ib < 0 ? 999 : ib) || a.name.localeCompare(b.name);
+    });
+    const rounds = Math.max(...ordered.map((m) => Math.floor((m.days ?? 30) / L)), 0);
+    const queue = [];
+    for (let r = 0; r < rounds; r++) for (const m of ordered) if (Math.floor((m.days ?? 30) / L) > r) queue.push(m);
+    (lanes[pool.team] ||= []).push(queue);
+  }
+  // Cada equipo necesita tantos huecos como la cola más larga de sus grupos.
+  const laneList = Object.entries(lanes).map(([team, queues]) => ({ team, queues, slots: Math.max(0, ...queues.map((q) => q.length)) }))
+    .sort((a, b) => b.slots - a.slots);
+  const occ = {}; // días ocupados por cada equipo
+  for (const l of laneList) occ[l.team] = new Array(N).fill(0);
+  const place = (lane, k, a) => {
+    for (const q of lane.queues) {
+      if (k >= q.length) continue;
+      vacations.push({ worker_id: q[k].worker_id, start: dateFromIndex(year, a), end: dateFromIndex(year, a + L - 1) });
+    }
+    for (let i = a; i < a + L; i++) occ[lane.team][i] = 1;
+  };
+
+  // 1) Todo seguido en una sola cadena, saltando las fechas bloqueadas.
+  let cursor = s0;
+  const pending = [];
+  const chain = [];
+  for (const lane of laneList) {
+    for (let k = 0; k < lane.slots; k++) {
+      while (cursor + L <= N && !free(cursor)) cursor++;
+      if (cursor + L <= N) { chain.push({ lane, k, a: cursor }); cursor += L; } else pending.push([lane, k]);
+    }
+  }
+  // Si sobra algo, el último tramo libre se pega al final del año: así el hueco que queda
+  // queda junto a otros periodos y lo que falta coincide lo menos posible.
+  if (pending.length && chain.length) {
+    const tailEnd = chain[chain.length - 1].a + L - 1;
+    let w = tailEnd;
+    while (w > s0 && !blocked[w - 1]) w--;
+    let shift = 0;
+    while (tailEnd + shift + 1 < N && !blocked[tailEnd + shift + 1]) shift++;
+    if (shift) for (const c of chain) if (c.a >= w) c.a += shift;
+  }
+  for (const c of chain) place(c.lane, c.k, c.a);
+  // 2) Lo que no cabe: en el hueco que menos coincida con otros equipos.
+  for (const [lane, k] of pending) {
+    let best = -1, bestCost = Infinity;
+    for (let a = s0; a + L <= N; a++) {
+      if (!free(a)) continue;
+      let own = 0, cross = 0;
+      for (let i = a; i < a + L; i++) { own += occ[lane.team][i]; for (const t in occ) if (t !== lane.team) cross += occ[t][i]; }
+      if (own) continue;
+      if (cross < bestCost) { bestCost = cross; best = a; }
+    }
+    if (best >= 0) place(lane, k, best);
+    else for (const q of lane.queues) if (k < q.length) unassigned[q[k].worker_id] = (unassigned[q[k].worker_id] || 0) + L;
+  }
+  vacations.sort((x, y) => (x.start < y.start ? -1 : x.start > y.start ? 1 : 0));
+  return finishRotation(ctx, vacations, unassigned, start);
+}
+
+// Cuántos días coinciden de vacaciones personas de equipos distintos (p. ej. un camarero y un cocinero).
+export function crossTeamOverlap(ctx, vacations) {
+  const year = ctx.year;
+  const byId = new Map(ctx.staff.map((s) => [s.worker_id, s]));
+  const days = new Map();
+  for (const v of vacations) {
+    const s = byId.get(v.worker_id);
+    if (!s) continue;
+    for (let i = Math.max(0, dayIndex(v.start, year)); i <= Math.min(daysInYear(year) - 1, dayIndex(v.end, year)); i++) {
+      if (!days.has(i)) days.set(i, new Set());
+      days.get(i).add(s.team);
+    }
+  }
+  return [...days.values()].filter((t) => t.size > 1).length;
+}
+
+function finishRotation(ctx, vacations, unassigned, start) {
+  const year = ctx.year;
+  const final = analyze({ ...ctx, vacations: vacations.map((v, i) => ({ ...v, id: -1 - i })) });
+  const monthLoad = new Array(12).fill(0);
+  for (const v of vacations) for (let i = dayIndex(v.start, year); i <= dayIndex(v.end, year); i++) monthLoad[month(dateFromIndex(year, i))]++;
+  return { vacations, reinforcements: [], unassigned, issues: final.issues, monthLoad, start, crossDays: crossTeamOverlap(ctx, vacations) };
+}
+
+// Variante "repartidas": cada grupo hace sus rondas separadas a lo largo del año.
+function generateRotationSpread(ctx, opts = {}) {
   const year = ctx.year;
   const N = daysInYear(year);
   const L = Number(opts.periodLength) || 15;
@@ -330,10 +439,7 @@ export function generateRotation(ctx, opts = {}) {
       }
     }
   }
-  const final = analyze({ ...ctx, vacations: vacations.map((v, i) => ({ ...v, id: -1 - i })) });
-  const monthLoad = new Array(12).fill(0);
-  for (const v of vacations) for (let i = dayIndex(v.start, year); i <= dayIndex(v.end, year); i++) monthLoad[month(dateFromIndex(year, i))]++;
-  return { vacations, reinforcements: [], unassigned, issues: final.issues, monthLoad, start };
+  return finishRotation(ctx, vacations, unassigned, start);
 }
 
 function firstMonday(year) {

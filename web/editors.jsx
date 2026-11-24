@@ -88,8 +88,21 @@ export function VacationModal({ data, initial, onClose, onDone }) {
       <DateRange data={data} start={start} end={end} setStart={setStart} setEnd={setEnd} min={`${data.year}-01-01`} />
       <div class="row"><span class="badge info">{len} días naturales</span><DaysInfo data={data} workerId={Number(workerId)} vacations={after} /></div>
       <Check problems={problems} />
+      <CrossTeamNote data={data} workerId={Number(workerId)} start={start} end={end} ignoreId={initial.id} />
     </Modal>
   );
+}
+
+/** Aviso suave: se permite, pero es mejor que un camarero y un cocinero no coincidan de vacaciones. */
+function CrossTeamNote({ data, workerId, start, end, ignoreId }) {
+  const me = data.staff.find((s) => s.worker_id === workerId);
+  if (!me || !isISODate(start) || !isISODate(end)) return null;
+  const others = data.vacations.filter((v) => v.id !== ignoreId && v.start <= end && v.end >= start)
+    .map((v) => ({ v, s: data.staff.find((x) => x.worker_id === v.worker_id) }))
+    .filter(({ s }) => s && s.team !== me.team);
+  if (!others.length) return null;
+  return <Alert kind="warn" title={`Se puede guardar, pero coincide con ${me.team === 'sala' ? 'cocina' : 'sala'}`}
+    items={others.map(({ v, s }) => `${s.name}: ${formatRange(v.start, v.end)}`).concat(['Es mejor que un camarero y un cocinero no estén de vacaciones a la vez.'])} />;
 }
 
 /** Solicitud de cambio de un trabajador: mover un periodo, pedir días nuevos o anular uno. */

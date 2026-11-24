@@ -149,6 +149,7 @@ export function createService({ repo, hashPassword, verifyPassword, randomToken,
       setSetting('periods', DEFAULT_PERIOD_RULES);
       repo.insert('years', { year: thisYear, status: 'publicado', published_at: now() });
       repo.insert('years', { year: planYear, status: 'borrador', published_at: null });
+      for (const y of [thisYear, planYear]) repo.insert('blocked', { year: y, start: `${y}-06-01`, end: `${y}-09-09`, reason: 'Temporada alta: no se cogen vacaciones' });
       for (const [first, last, team, shift] of workers) {
         const w = repo.insert('workers', { first_name: first, last_name: last, created_at: now() });
         for (const year of [thisYear, planYear]) repo.insert('staff', { year, worker_id: w.id, team, shift, days: DEFAULT_ANNUAL_DAYS });
@@ -274,6 +275,12 @@ export function createService({ repo, hashPassword, verifyPassword, randomToken,
       const from = Number(copyFrom) || Math.max(0, ...repo.all('years').map((y) => y.year).filter((y) => y < year));
       const src = from ? repo.all('staff', { year: from }) : [];
       for (const s of src) repo.insert('staff', { year, worker_id: s.worker_id, team: s.team, shift: s.shift, days: s.days });
+      // Las fechas bloqueadas (p. ej. temporada alta) se repiten cada año.
+      if (from) for (const b of repo.all('blocked', { year: from })) {
+        const mv = (d) => `${year}${d.slice(4)}`;
+        if (b.start.slice(5) === '02-29' || b.end.slice(5) === '02-29') continue;
+        repo.insert('blocked', { year, start: mv(b.start), end: mv(b.end), reason: b.reason });
+      }
       log(user, year, 'Año creado', src.length ? `Se copió la plantilla de ${from} (${src.length} trabajadores).` : 'Año vacío.');
       return { ok: true, copied: src.length };
     },

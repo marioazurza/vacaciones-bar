@@ -392,6 +392,7 @@ export function GeneratorPage({ data, reload }) {
           </div>
           {prop.issues.length ? <Alert kind="bad" title="La propuesta tiene conflictos" items={prop.issues.slice(0, 6).map((i) => describeIssue(i, nameOf))} />
             : <Alert kind="ok" title="Cumple todas las reglas todos los días del año." />}
+          {prop.crossDays > 0 && <Alert kind="info" title={`Un camarero y un cocinero coinciden de vacaciones ${prop.crossDays} día${prop.crossDays > 1 ? 's' : ''}`} items={['El generador ya las coloca para que coincidan lo menos posible con los días disponibles.']} />}
           {Object.keys(prop.unassigned).length > 0 && <Alert kind="warn" title="No se pudieron colocar todos los días" items={Object.entries(prop.unassigned).map(([id, n]) => `${nameOf(Number(id))}: faltan ${n} días`)} />}
           {prop.reinforcements.length > 0 && <Alert kind="info" title={`La propuesta incluye ${prop.reinforcements.length} periodos de suplente en cocina`} items={prop.reinforcements.map((r) => `${groupLabel(r.team, r.shift)}: ${formatRange(r.start, r.end)} (${r.note})`)} />}
           <div>

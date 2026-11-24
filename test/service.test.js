@@ -204,6 +204,12 @@ test('plantilla del bar: en sala nunca más de un camarero de vacaciones a la ve
     }
   }
   assert.equal(days.size, 7 * 30);
+  // Nada entre el 1 de junio y el 9 de septiembre, y camareros y cocineros casi sin coincidir.
+  for (const v of d.vacations) assert.ok(v.end < '2027-06-01' || v.start > '2027-09-09', `${v.start}–${v.end} en temporada alta`);
+  assert.equal(d.vacations.length, 7 * 2 + 4 * 2);
+  const cook = new Set();
+  for (const v of d.vacations) if (!sala.has(v.worker_id)) for (let x = new Date(v.start); x <= new Date(v.end); x.setUTCDate(x.getUTCDate() + 1)) cook.add(x.toISOString().slice(0, 10));
+  assert.ok([...cook].filter((k) => days.has(k)).length <= 7);
   // Un camarero de mañana y otro de tarde a la vez: se rechaza.
   const m = d.staff.find((s) => s.team === 'sala' && s.shift === 'M');
   const t = d.staff.find((s) => s.team === 'sala' && s.shift === 'T');
