@@ -50,7 +50,7 @@ export function CalendarPage({ data, reload, isAdmin, me }) {
       </div>
       <Legend />
       {view === 'year' && <YearView cal={cal} filters={filters} onDay={setDay} onMonth={goMonth} />}
-      {view === 'month' && <MonthView cal={cal} filters={filters} month={m} onDay={setDay}
+      {view === 'month' && <MonthView cal={cal} filters={filters} month={m} onMonth={setM} onDay={setDay}
         onBar={isAdmin ? (v) => setEdit(v) : null}
         onPick={isAdmin ? (worker_id, start, end) => setEdit({ worker_id, start, end }) : null} fixedLength={data.periodRules?.periodLength || 0} />}
       {view === 'week' && <WeekView cal={cal} filters={filters} start={wk} onDay={setDay}
@@ -402,7 +402,7 @@ export function GeneratorPage({ data, reload }) {
             {view === 'month' && <div class="row"><button class="btn sm" onClick={() => setM((m + 11) % 12)}>‹</button><b style="min-width:90px;text-align:center">{MONTHS[m]}</b><button class="btn sm" onClick={() => setM((m + 1) % 12)}>›</button></div>}
           </div>
           {view === 'year' ? <YearView cal={cal} filters={{}} onDay={() => {}} onMonth={(mm) => { setM(mm); setView('month'); }} />
-            : <MonthView cal={cal} filters={{}} month={m} onDay={() => {}} previewIds={previewIds} />}
+            : <MonthView cal={cal} filters={{}} month={m} onMonth={setM} onDay={() => {}} previewIds={previewIds} />}
           <div class="table-wrap"><table class="table">
             <thead><tr><th>Trabajador</th><th>Periodos propuestos</th><th>Días</th></tr></thead>
             <tbody>{data.staff.map((st) => {

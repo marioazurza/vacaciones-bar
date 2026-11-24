@@ -1,4 +1,4 @@
-import { useState } from 'preact/hooks';
+import { useState, useRef, useEffect } from 'preact/hooks';
 import {
   MONTHS, WEEKDAYS, WEEKDAYS_SHORT, dateFromIndex, dayIndex, daysInMonth, dow, formatDate, formatRange,
   periodLength, addDays, weekStart, diffDays, formatShort,
@@ -96,14 +96,14 @@ export function YearView({ cal, filters, onDay, onMonth }) {
 // ---------- Línea de tiempo (filas por trabajador, barras continuas) ----------
 // La usan la vista mensual y la semanal: cada periodo de vacaciones es una sola barra
 // que ocupa todos sus días.
-function TimelineView({ cal, filters, from, n, title, wide, onDay, onBar, onPick, previewIds, fixedLength = 0 }) {
+function TimelineView({ cal, filters, from, n, title, wide, onDay, onBar, onPick, previewIds, fixedLength = 0, wrapRef, onScroll, months }) {
   const [sel, setSel] = useState(null);
   const last = addDays(from, n - 1);
   const yStart = `${cal.year}-01-01`, yEnd = `${cal.year}-12-31`;
   const inYear = (d) => d >= yStart && d <= yEnd;
   const days = Array.from({ length: n }, (_, k) => addDays(from, k));
   const staff = applyFilters(cal.staff, filters);
-  const cols = wide ? `minmax(110px, 190px) repeat(${n}, minmax(72px, 1fr))` : `minmax(150px, 190px) repeat(${n}, minmax(32px, 1fr))`;
+  const cols = months ? `170px repeat(${n}, 34px)` : wide ? `minmax(110px, 190px) repeat(${n}, minmax(72px, 1fr))` : `minmax(150px, 190px) repeat(${n}, minmax(32px, 1fr))`;
   const col = (date) => 2 + diffDays(from, date);
   // Si hay máximo por turno y ningún mínimo, la fila resumen muestra cuántos faltan.
   const byMax = Object.values(cal.analysis.groups).some((G) => Number.isFinite(G.allowedOff[0])) && Object.values(cal.minimums).every((t) => Object.values(t).every((row) => row.every((x) => x === 0)));
@@ -113,7 +113,8 @@ function TimelineView({ cal, filters, from, n, title, wide, onDay, onBar, onPick
   items.push(<div class="g-name" style={{ gridRow: 1, gridColumn: 1, zIndex: 4 }} key="hn"><b>{title}</b></div>);
   days.forEach((date, d) => {
     items.push(
-      <div key={`h${d}`} class={`g-head ${dow(date) >= 4 ? 'we' : ''} ${date === cal.today ? 'today' : ''}`} style={{ gridRow: 1, gridColumn: 2 + d }} onClick={() => inYear(date) && onDay(date)}>
+      <div key={`h${d}`} data-date={date} class={`g-head ${dow(date) >= 4 ? 'we' : ''} ${date === cal.today ? 'today' : ''} ${months && date.endsWith('-01') ? 'mstart' : ''}`} style={{ gridRow: 1, gridColumn: 2 + d }} onClick={() => inYear(date) && onDay(date)}>
+        {months && <i class="g-month">{date.endsWith('-01') ? MONTHS[Number(date.slice(5, 7)) - 1] : '\u00a0'}</i>}
         {wide ? WEEKDAYS[dow(date)] : WEEKDAYS_SHORT[dow(date)]}<b>{Number(date.slice(8, 10))}</b>
       </div>,
     );
@@ -131,9 +132,9 @@ function TimelineView({ cal, filters, from, n, title, wide, onDay, onBar, onPick
     const G = cal.analysis.groups[g.key];
     if (g.shift !== lastShift) {
       lastShift = g.shift;
-      items.push(<div class={`shift-band ${g.shift}`} style={{ gridRow: row++ }} key={`sb${g.shift}`}>{g.shift === 'M' ? '☀️ Turno de mañana' : '🌙 Turno de tarde'}</div>);
+      items.push(<div class={`shift-band ${g.shift}`} style={{ gridRow: row++ }} key={`sb${g.shift}`}><span class="stick">{g.shift === 'M' ? '☀️ Turno de mañana' : '🌙 Turno de tarde'}</span></div>);
     }
-    items.push(<div class="g-group" style={{ gridRow: row++ }} key={`g${g.key}`}><GroupDot team={g.team} shift={g.shift} /> {TEAMS[g.team]} <span class="muted" style="text-transform:none;font-weight:500">· {SHIFTS[g.shift].toLowerCase()} · {members.length} personas</span></div>);
+    items.push(<div class="g-group" style={{ gridRow: row++ }} key={`g${g.key}`}><span class="stick"><GroupDot team={g.team} shift={g.shift} /> {TEAMS[g.team]} <span class="muted" style="text-transform:none;font-weight:500">· {SHIFTS[g.shift].toLowerCase()} · {members.length} personas</span></span></div>);
     for (const s of members) {
       const r = row++;
       items.push(<div class="g-name" style={{ gridRow: r, gridColumn: 1 }} key={`n${s.worker_id}`} title={s.name}><span class={`dot ${colorClass(s.team, s.shift)}`} />{s.name}</div>);
@@ -143,7 +144,7 @@ function TimelineView({ cal, filters, from, n, title, wide, onDay, onBar, onPick
         const isSel = sel && sel.worker_id === s.worker_id && sel.date === date;
         const pick = onPick && ok;
         items.push(
-          <div key={`c${s.worker_id}-${d}`} class={`g-cell ${dow(date) >= 4 ? 'we' : ''} ${ok && cal.analysis.blockedDay[i] ? 'blocked' : ''} ${pick ? 'pick' : ''} ${isSel ? 'sel' : ''}`}
+          <div key={`c${s.worker_id}-${d}`} class={`g-cell ${months && date.endsWith('-01') ? 'mstart' : ''} ${dow(date) >= 4 ? 'we' : ''} ${ok && cal.analysis.blockedDay[i] ? 'blocked' : ''} ${pick ? 'pick' : ''} ${isSel ? 'sel' : ''}`}
             style={{ gridRow: r, gridColumn: 2 + d }}
             title={pick ? (fixedLength || !sel ? 'Haz clic en el primer día del periodo' : 'Haz clic en el último día del periodo') : ''}
             onClick={pick ? () => {
@@ -156,7 +157,7 @@ function TimelineView({ cal, filters, from, n, title, wide, onDay, onBar, onPick
       for (const v of cal.vacations) {
         if (v.worker_id !== s.worker_id || v.end < from || v.start > last) continue;
         const len = periodLength(v.start, v.end);
-        const label = wide ? `🌴 ${s.first_name} · ${formatRange(v.start, v.end)} (${len} días)` : `${s.first_name} · ${len}d`;
+        const label = wide ? `🌴 ${s.first_name} · ${formatRange(v.start, v.end)} (${len} días)` : months ? <span class="stick-bar">{s.first_name} · {formatRange(v.start, v.end)} ({len} días)</span> : `${s.first_name} · ${len}d`;
         bar(`v${v.id}`, r, v.start, v.end, `g-bar ${colorClass(s.team, s.shift)} ${previewIds?.has(v.id) ? 'preview' : ''} ${onBar ? '' : 'ro'}`,
           label, `${s.name}: ${formatRange(v.start, v.end)} (${len} días)`, onBar ? (e) => { e.stopPropagation(); onBar(v); } : null);
       }
@@ -182,15 +183,42 @@ function TimelineView({ cal, filters, from, n, title, wide, onDay, onBar, onPick
   return (
     <div class="stack">
       {onPick && <div class="small muted">{fixedLength ? `Para añadir vacaciones, haz clic en el primer día en la fila del trabajador (se cogen ${fixedLength} días seguidos). Haz clic en una barra para editarla.` : sel ? `Primer día: ${formatDate(sel.date)}. Ahora haz clic en el último día del periodo en la misma fila.` : 'Para añadir vacaciones, haz clic en el primer y el último día en la fila del trabajador. Haz clic en una barra para editarla.'}</div>}
-      <div class="gantt-wrap"><div class={`gantt ${wide ? 'wide' : ''}`} style={{ gridTemplateColumns: cols }}>{items}</div></div>
+      <div class="gantt-wrap" ref={wrapRef} onScroll={onScroll}><div class={`gantt ${wide ? 'wide' : ''} ${months ? 'months' : ''}`} style={{ gridTemplateColumns: cols }}>{items}</div></div>
     </div>
   );
 }
 
 // ---------- Vista mensual ----------
-export function MonthView({ cal, month, ...rest }) {
-  const from = `${cal.year}-${String(month + 1).padStart(2, '0')}-01`;
-  return <TimelineView cal={cal} from={from} n={daysInMonth(cal.year, month)} title={`${MONTHS[month]} ${cal.year}`} {...rest} />;
+// Todo el año en una sola línea de tiempo: se abre en el mes elegido y deslizando
+// hacia la derecha se pasa directamente al mes siguiente.
+export function MonthView({ cal, month, onMonth, ...rest }) {
+  const wrap = useRef(null);
+  const shown = useRef(-1); // mes que se ve ahora mismo (para no recolocar al deslizar)
+  const from = `${cal.year}-01-01`;
+  const n = diffDays(from, `${cal.year}-12-31`) + 1;
+  const monthStart = (m) => `${cal.year}-${String(m + 1).padStart(2, '0')}-01`;
+  // Posición de una cabecera de día dentro de la zona que se desliza (sin contar la columna de nombres).
+  const posOf = (h) => wrap.current.scrollLeft + h.getBoundingClientRect().left - wrap.current.getBoundingClientRect().left - nameW();
+  const nameW = () => wrap.current?.querySelector('.g-name')?.offsetWidth || 0;
+  useEffect(() => {
+    const el = wrap.current;
+    if (!el || shown.current === month) return;
+    const h = el.querySelector(`[data-date="${monthStart(month)}"]`);
+    if (h) el.scrollLeft = posOf(h);
+    shown.current = month;
+  }, [month, cal.year]);
+  const onScroll = () => {
+    const el = wrap.current;
+    if (!el) return;
+    const x = el.scrollLeft + 60;
+    let m = 0;
+    for (let k = 0; k < 12; k++) {
+      const h = el.querySelector(`[data-date="${monthStart(k)}"]`);
+      if (h && posOf(h) <= x) m = k;
+    }
+    if (m !== shown.current) { shown.current = m; onMonth?.(m); }
+  };
+  return <TimelineView cal={cal} from={from} n={n} months title={`${cal.year} →`} wrapRef={wrap} onScroll={onScroll} {...rest} />;
 }
 
 // ---------- Vista semanal ----------
