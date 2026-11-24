@@ -294,78 +294,93 @@ export function generateRotation(ctx, opts = {}) {
   if (opts.notBefore && opts.notBefore > start) start = opts.notBefore;
   const s0 = dayIndex(start, year);
   const blocked = base.blockedDay.map((b) => !!b);
-  const free = (a) => { if (a < s0 || a + L > N) return false; for (let i = a; i < a + L; i++) if (blocked[i]) return false; return true; };
+  const fixed = opts.fixed || []; // vacaciones que ya están puestas y se respetan
   const vacations = [];
   const unassigned = {};
 
-  // "Grupos de rotación": en un equipo que cuenta los dos turnos juntos (sala) hay una sola
-  // cadena; si no, una por turno. Los grupos del mismo equipo van en paralelo (en cocina,
-  // el de mañana y el de tarde pueden coincidir) y los equipos van uno detrás de otro, para
-  // que un camarero y un cocinero no estén de vacaciones a la vez siempre que se pueda.
+  // Grupos de rotación: en un equipo que cuenta los dos turnos juntos (sala) hay una sola
+  // cadena; si no, una por turno. Nunca dos del mismo grupo a la vez, y se procura que no
+  // coincidan personas de equipos distintos (un camarero y un cocinero).
   const wholeTeams = new Set(ctx.wholeTeam || []);
+  const poolKeyOf = (s) => (wholeTeams.has(s.team) ? s.team : groupKey(s.team, s.shift));
+  const byId = new Map(ctx.staff.map((s) => [s.worker_id, s]));
   const pools = {};
-  for (const s of ctx.staff) (pools[wholeTeams.has(s.team) ? s.team : groupKey(s.team, s.shift)] ||= { team: s.team, members: [] }).members.push(s);
-  const lanes = {};
-  for (const [key, pool] of Object.entries(pools)) {
-    const wanted = opts.order?.[key] || (wholeTeams.has(key) ? Object.keys(opts.order || {}).filter((k) => k.startsWith(`${key}-`)).flatMap((k) => opts.order[k]) : []);
-    const ordered = [...pool.members].sort((a, b) => {
-      const ia = wanted.indexOf(a.worker_id), ib = wanted.indexOf(b.worker_id);
-      return (ia < 0 ? 999 : ia) - (ib < 0 ? 999 : ib) || a.name.localeCompare(b.name);
-    });
-    const rounds = Math.max(...ordered.map((m) => Math.floor((m.days ?? 30) / L)), 0);
-    const queue = [];
-    for (let r = 0; r < rounds; r++) for (const m of ordered) if (Math.floor((m.days ?? 30) / L) > r) queue.push(m);
-    (lanes[pool.team] ||= []).push(queue);
+  for (const s of ctx.staff) (pools[poolKeyOf(s)] ||= { key: poolKeyOf(s), team: s.team, members: [], occ: new Array(N).fill(0) }).members.push(s);
+  const teamOcc = {};
+  for (const p of Object.values(pools)) teamOcc[p.team] ||= new Array(N).fill(0);
+  const fixedDays = new Map();
+  const mark = (s, a, b) => { const p = pools[poolKeyOf(s)]; for (let i = Math.max(0, a); i <= Math.min(N - 1, b); i++) { p.occ[i] = 1; teamOcc[s.team][i] = 1; } };
+  for (const v of fixed) {
+    const s = byId.get(v.worker_id);
+    if (!s) continue;
+    const a = dayIndex(v.start, year), b = dayIndex(v.end, year);
+    mark(s, a, b);
+    fixedDays.set(s.worker_id, (fixedDays.get(s.worker_id) || 0) + Math.min(N - 1, b) - Math.max(0, a) + 1);
   }
-  // Cada equipo necesita tantos huecos como la cola más larga de sus grupos.
-  const laneList = Object.entries(lanes).map(([team, queues]) => ({ team, queues, slots: Math.max(0, ...queues.map((q) => q.length)) }))
-    .sort((a, b) => b.slots - a.slots);
-  const occ = {}; // días ocupados por cada equipo
-  for (const l of laneList) occ[l.team] = new Array(N).fill(0);
-  const place = (lane, k, a) => {
-    for (const q of lane.queues) {
-      if (k >= q.length) continue;
-      vacations.push({ worker_id: q[k].worker_id, start: dateFromIndex(year, a), end: dateFromIndex(year, a + L - 1) });
-    }
-    for (let i = a; i < a + L; i++) occ[lane.team][i] = 1;
-  };
+  const cross = (team, a) => { let c = 0; for (let i = a; i < a + L; i++) for (const t in teamOcc) if (t !== team && teamOcc[t][i]) { c++; break; } return c; };
+  const hardFree = (p, a) => { if (a < s0 || a + L > N) return false; for (let i = a; i < a + L; i++) if (blocked[i] || p.occ[i]) return false; return true; };
+  const put = (s, a) => { vacations.push({ worker_id: s.worker_id, start: dateFromIndex(year, a), end: dateFromIndex(year, a + L - 1) }); mark(s, a, a + L - 1); };
 
-  // 1) Todo seguido en una sola cadena, saltando las fechas bloqueadas.
-  let cursor = s0;
-  const pending = [];
-  const chain = [];
-  for (const lane of laneList) {
-    for (let k = 0; k < lane.slots; k++) {
-      while (cursor + L <= N && !free(cursor)) cursor++;
-      if (cursor + L <= N) { chain.push({ lane, k, a: cursor }); cursor += L; } else pending.push([lane, k]);
+  const queues = Object.values(pools).map((p) => {
+    const wanted = opts.order?.[p.key] || (wholeTeams.has(p.key) ? Object.keys(opts.order || {}).filter((k) => k.startsWith(`${p.key}-`)).flatMap((k) => opts.order[k]) : []);
+    const ordered = [...p.members].sort((x, y) => {
+      const ia = wanted.indexOf(x.worker_id), ib = wanted.indexOf(y.worker_id);
+      return (ia < 0 ? 999 : ia) - (ib < 0 ? 999 : ib) || x.name.localeCompare(y.name);
+    });
+    const left = new Map(ordered.map((m) => [m.worker_id, Math.floor(Math.max(0, (m.days ?? 30) - (fixedDays.get(m.worker_id) || 0)) / L)]));
+    const queue = [];
+    for (let r = 0; [...left.values()].some((n) => n > r); r++) for (const m of ordered) if (left.get(m.worker_id) > r) queue.push(m);
+    return { pool: p, queue };
+  }).sort((x, y) => y.queue.length - x.queue.length);
+
+  queues.forEach(({ pool, queue }, qi) => {
+    if (qi === 0) {
+      // El grupo más grande va seguido, uno detrás de otro. Primero se intenta sin pisar los
+      // días en que otro equipo ya está de vacaciones; si no cabe, se permite.
+      const chainOf = (soft) => {
+        const ok = (a) => hardFree(pool, a) && (!soft || cross(pool.team, a) === 0);
+        const out = [];
+        let c = s0;
+        for (let k = 0; k < queue.length; k++) {
+          while (c + L <= N && !ok(c)) c++;
+          if (c + L > N) return null;
+          out.push(c); c += L;
+        }
+        return { out, ok };
+      };
+      const ch = chainOf(true) || chainOf(false);
+      if (ch) {
+        // El último tramo se pega al final de su hueco libre: lo que quede libre queda junto
+        // y lo pueden usar los demás equipos sin coincidir.
+        const out = ch.out;
+        const last = out[out.length - 1];
+        let first = out.length - 1;
+        while (first > 0 && out[first - 1] + L === out[first]) first--;
+        let shift = 0;
+        while (last + shift + 1 + L <= N && ch.ok(last + shift + 1) && hardFreeRange(out[first] + shift + 1, last + shift + L)) shift++;
+        if (shift && first > 0) for (let k = first; k < out.length; k++) out[k] += shift;
+        out.forEach((a, k) => put(queue[k], a));
+        return;
+      }
     }
-  }
-  // Si sobra algo, el último tramo libre se pega al final del año: así el hueco que queda
-  // queda junto a otros periodos y lo que falta coincide lo menos posible.
-  if (pending.length && chain.length) {
-    const tailEnd = chain[chain.length - 1].a + L - 1;
-    let w = tailEnd;
-    while (w > s0 && !blocked[w - 1]) w--;
-    let shift = 0;
-    while (tailEnd + shift + 1 < N && !blocked[tailEnd + shift + 1]) shift++;
-    if (shift) for (const c of chain) if (c.a >= w) c.a += shift;
-  }
-  for (const c of chain) place(c.lane, c.k, c.a);
-  // 2) Lo que no cabe: en el hueco que menos coincida con otros equipos.
-  for (const [lane, k] of pending) {
-    let best = -1, bestCost = Infinity;
-    for (let a = s0; a + L <= N; a++) {
-      if (!free(a)) continue;
-      let own = 0, cross = 0;
-      for (let i = a; i < a + L; i++) { own += occ[lane.team][i]; for (const t in occ) if (t !== lane.team) cross += occ[t][i]; }
-      if (own) continue;
-      if (cross < bestCost) { bestCost = cross; best = a; }
+    // Resto de grupos: cada periodo donde menos coincida con otros equipos (y lo antes posible).
+    for (const m of queue) {
+      let best = -1, bestCost = Infinity;
+      for (let a = s0; a + L <= N; a++) {
+        if (!hardFree(pool, a)) continue;
+        const cost = cross(pool.team, a) * 1000 + a;
+        if (cost < bestCost) { bestCost = cost; best = a; }
+      }
+      if (best >= 0) put(m, best);
+      else unassigned[m.worker_id] = (unassigned[m.worker_id] || 0) + L;
     }
-    if (best >= 0) place(lane, k, best);
-    else for (const q of lane.queues) if (k < q.length) unassigned[q[k].worker_id] = (unassigned[q[k].worker_id] || 0) + L;
-  }
+  });
+  function hardFreeRange(a, b) { for (let i = a; i <= b; i++) if (i >= N || blocked[i]) return false; return true; }
+
   vacations.sort((x, y) => (x.start < y.start ? -1 : x.start > y.start ? 1 : 0));
-  return finishRotation(ctx, vacations, unassigned, start);
+  const all = [...fixed.map((v) => ({ worker_id: v.worker_id, start: v.start, end: v.end })), ...vacations];
+  const res = finishRotation(ctx, all, unassigned, start);
+  return { ...res, vacations };
 }
 
 // Cuántos días coinciden de vacaciones personas de equipos distintos (p. ej. un camarero y un cocinero).

@@ -204,6 +204,14 @@ test('plantilla del bar: en sala nunca más de un camarero de vacaciones a la ve
     }
   }
   assert.equal(days.size, 7 * 30);
+  // Naima tiene todo enero (1–30) y nadie de sala coincide con ella.
+  const naima = d.staff.find((s) => s.first_name === 'Naima');
+  assert.deepEqual(d.vacations.filter((v) => v.worker_id === naima.worker_id).map((v) => [v.start, v.end]).sort(), [['2027-01-01', '2027-01-15'], ['2027-01-16', '2027-01-30']]);
+  assert.ok(![...days.keys()].some((k) => k <= '2027-01-30'));
+  // Al volver a generar, lo pedido por Naima se mantiene.
+  const prop = service.call(admin, 'generate', { year: 2027 });
+  assert.equal(prop.issues.length, 0);
+  assert.equal(prop.vacations.filter((v) => v.worker_id === naima.worker_id && v.start < '2027-02-01').length, 2);
   // Nada entre el 1 de junio y el 9 de septiembre, y camareros y cocineros casi sin coincidir.
   for (const v of d.vacations) assert.ok(v.end < '2027-06-01' || v.start > '2027-09-09', `${v.start}–${v.end} en temporada alta`);
   assert.equal(d.vacations.length, 7 * 2 + 4 * 2);

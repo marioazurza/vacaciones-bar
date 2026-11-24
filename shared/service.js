@@ -38,6 +38,12 @@ export const EXAMPLE_WORKERS = [
   ['Raúl', 'Iglesias Peña', 'sala', 'T'],
 ];
 
+// Vacaciones ya pedidas para el año que se planifica (mes-día).
+const BAR_REQUESTED = [
+  ['Naima', '01-01', '01-15', 'Pedido por Naima: enero'],
+  ['Naima', '01-16', '01-30', 'Pedido por Naima: enero'],
+];
+
 // Plantilla real del bar.
 export const BAR_WORKERS = [
   ['Naima', 'Rija', 'cocina', 'M'],
@@ -159,7 +165,15 @@ export function createService({ repo, hashPassword, verifyPassword, randomToken,
         // Los dos años ya configurados con la rotación por turnos: 15 días seguidos por
         // persona, uno detrás de otro, nunca dos del mismo turno a la vez.
         for (const year of [thisYear, planYear]) {
-          const prop = generateRotation(ctxFor(year), { periodLength: DEFAULT_PERIOD_RULES.periodLength });
+          // Fechas ya pedidas por los trabajadores para el año que se planifica.
+          if (year === planYear && workers === BAR_WORKERS) {
+            for (const [first, a, b, note] of BAR_REQUESTED) {
+              const w = repo.all('workers').find((x) => x.first_name === first);
+              if (w) repo.insert('vacations', { year, worker_id: w.id, start: `${year}-${a}`, end: `${year}-${b}`, note, created_at: now() });
+            }
+          }
+          const fixed = repo.all('vacations', { year });
+          const prop = generateRotation(ctxFor(year), { periodLength: DEFAULT_PERIOD_RULES.periodLength, fixed });
           if (prop.issues.length) continue;
           for (const v of prop.vacations) repo.insert('vacations', { ...v, year, note: 'Rotación por turnos', created_at: now() });
         }
@@ -421,7 +435,10 @@ export function createService({ repo, hashPassword, verifyPassword, randomToken,
       const notBefore = today() > `${year}-01-01` ? today() : null;
       if (gs.strategy === 'rotacion') {
         const nb = notBefore && notBefore > `${year}-12-31` ? `${year + 1}-01-01` : notBefore;
-        return { ...generateRotation({ ...ctx, vacations: [] }, { ...gs.rotation, periodLength: periodRules().periodLength || 15, notBefore: nb ? addDays(nb, 1) : null }), replaceOnly: true };
+        // Las vacaciones pedidas por un trabajador (nota "Pedido…") se respetan tal cual.
+        const fixed = ctx.vacations.filter((v) => String(v.note || '').startsWith('Pedido'));
+        const prop = generateRotation({ ...ctx, vacations: [] }, { ...gs.rotation, periodLength: periodRules().periodLength || 15, notBefore: nb ? addDays(nb, 1) : null, fixed });
+        return { ...prop, vacations: [...fixed.map((v) => ({ worker_id: v.worker_id, start: v.start, end: v.end, note: v.note })), ...prop.vacations], replaceOnly: true };
       }
       const prop = generateProposal(ctx, {
         ...gs,
@@ -439,7 +456,7 @@ export function createService({ repo, hashPassword, verifyPassword, randomToken,
       requireYear(year);
       const clean = (vacations || []).map((v) => {
         checkVacationPeriod(v.start, v.end, year);
-        return { year, worker_id: Number(v.worker_id), start: v.start, end: v.end };
+        return { year, worker_id: Number(v.worker_id), start: v.start, end: v.end, note: String(v.note || '').startsWith('Pedido') ? String(v.note).slice(0, 200) : '' };
       });
       const reins = (reinforcements || []).map((r) => {
         checkPeriod(r.start, r.end);
@@ -453,7 +470,7 @@ export function createService({ repo, hashPassword, verifyPassword, randomToken,
       }, 'No se puede aplicar la propuesta porque');
       if (replace) repo.removeWhere('vacations', { year });
       for (const r of reins) repo.insert('reinforcements', r);
-      for (const v of clean) repo.insert('vacations', { ...v, note: 'Propuesta automática', created_at: now() });
+      for (const v of clean) repo.insert('vacations', { ...v, note: v.note || 'Propuesta automática', created_at: now() });
       log(user, year, 'Propuesta aplicada', `${clean.length} periodos${reins.length ? ` y ${reins.length} suplentes de cocina` : ''}${replace ? ' (sustituyendo el calendario anterior)' : ''}.`);
       return { ok: true };
     },
