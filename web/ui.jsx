@@ -129,15 +129,14 @@ export function Legend() {
   return (
     <div class="legend">
       <ShiftTag shift="M" />
-      <span><i class="dot c-cocina-m" /> Cocina</span>
-      <span><i class="dot c-sala-m" /> Camareros</span>
+      <span><i class="chip-k c-cocina-m">C</i> 🍳 Cocina</span>
+      <span><i class="chip-k c-sala-m">S</i> 🍽️ Camareros</span>
       <i class="sep" />
       <ShiftTag shift="T" />
-      <span><i class="dot c-cocina-t" /> Cocina</span>
-      <span><i class="dot c-sala-t" /> Camareros</span>
+      <span><i class="chip-k c-cocina-t">C</i> 🍳 Cocina</span>
+      <span><i class="chip-k c-sala-t">S</i> 🍽️ Camareros</span>
       <i class="sep" />
       <span><i class="dot" style="background:var(--bad)" /> Falta personal</span>
-      <span><i class="dot" style="background:var(--warn)" /> Al límite</span>
     </div>
   );
 }

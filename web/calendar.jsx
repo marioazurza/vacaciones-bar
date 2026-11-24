@@ -46,7 +46,7 @@ function dayInfo(cal, i, visibleIds) {
       if (G.problem[i] > 0) bad = true;
       else if (offHere.length > 0 && G.room[i] <= 0) full = true;
     }
-    for (const id of shown) marks.push({ id, cls: colorClass(g.team, g.shift) });
+    for (const id of shown) marks.push({ id, team: g.team, cls: colorClass(g.team, g.shift) });
   }
   return { bad, full, marks };
 }
@@ -76,12 +76,12 @@ export function YearView({ cal, filters, onDay, onMonth }) {
                 const date = dateFromIndex(cal.year, i);
                 const info = dayInfo(cal, i, visible);
                 const we = dow(date) >= 4;
-                const cls = ['dcell', we && 'we', info.bad && 'bad', !info.bad && info.full && 'full', cal.analysis.blockedDay[i] && 'blocked', date === cal.today && 'today'].filter(Boolean).join(' ');
+                const cls = ['dcell', we && 'we', info.bad && 'bad', cal.analysis.blockedDay[i] && 'blocked', date === cal.today && 'today'].filter(Boolean).join(' ');
                 const title = `${formatDate(date, { weekday: true })}${info.marks.length ? `\nDe vacaciones: ${info.marks.map((x) => nameOf(x.id)).join(', ')}` : ''}${info.bad ? '\n⚠ Falta personal' : ''}`;
                 return (
                   <div class={cls} key={d} title={title} onClick={() => onDay(date)}>
                     <span class="n">{d + 1}</span>
-                    <span class="marks">{info.marks.slice(0, 8).map((x) => <i key={x.id} class={x.cls} />)}</span>
+                    <span class="marks">{info.marks.slice(0, 6).map((x) => <i key={x.id} class={`${x.cls} k-${x.team}`}>{x.team === 'cocina' ? 'C' : 'S'}</i>)}</span>
                   </div>
                 );
               })}
@@ -157,7 +157,8 @@ function TimelineView({ cal, filters, from, n, title, wide, onDay, onBar, onPick
       for (const v of cal.vacations) {
         if (v.worker_id !== s.worker_id || v.end < from || v.start > last) continue;
         const len = periodLength(v.start, v.end);
-        const label = wide ? `🌴 ${s.first_name} · ${formatRange(v.start, v.end)} (${len} días)` : months ? <span class="stick-bar">{s.first_name} · {formatRange(v.start, v.end)} ({len} días)</span> : `${s.first_name} · ${len}d`;
+        const ico = s.team === 'cocina' ? '🍳' : '🍽️';
+        const label = wide ? `${ico} ${s.first_name} · ${formatRange(v.start, v.end)} (${len} días)` : months ? <span class="stick-bar">{ico} {s.first_name} · {formatRange(v.start, v.end)} ({len} días)</span> : `${ico} ${s.first_name} · ${len}d`;
         bar(`v${v.id}`, r, v.start, v.end, `g-bar ${colorClass(s.team, s.shift)} ${previewIds?.has(v.id) ? 'preview' : ''} ${onBar ? '' : 'ro'}`,
           label, `${s.name}: ${formatRange(v.start, v.end)} (${len} días)`, onBar ? (e) => { e.stopPropagation(); onBar(v); } : null);
       }
