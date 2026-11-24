@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { openRepo } from '../server/db.js';
 import { createService, ApiError } from '../shared/service.js';
 
-function setup() {
+function setup({ periodLength = 0 } = {}) {
   const repo = openRepo(':memory:');
   let n = 0;
   const service = createService({
@@ -15,7 +15,9 @@ function setup() {
   });
   service.seed({ withDemoPlan: false });
   const login = (u, p) => service.call(null, 'login', { username: u, password: p }).token;
-  return { repo, service, admin: login('admin', 'admin'), login };
+  const admin = login('admin', 'admin');
+  service.call(admin, 'savePeriodRules', { periodLength });
+  return { repo, service, admin, login };
 }
 
 const err = (fn) => { try { fn(); } catch (e) { assert.ok(e instanceof ApiError, e.message); return e; } assert.fail('debería fallar'); };
@@ -121,4 +123,19 @@ test('duplicar la plantilla para el año siguiente', () => {
   const { service, admin } = setup();
   service.call(admin, 'createYear', { year: 2028, copyFrom: 2027 });
   assert.equal(service.call(admin, 'getYear', { year: 2028 }).staff.length, 12);
+});
+
+test('periodos fijos de 15 días: el generador da 2 × 15 a todos y propone suplentes en cocina', () => {
+  const { service, admin } = setup({ periodLength: 15 });
+  const prop = service.call(admin, 'generate', { year: 2027 });
+  assert.equal(prop.issues.length, 0);
+  assert.deepEqual(prop.unassigned, {});
+  assert.equal(prop.vacations.length, 24);
+  for (const v of prop.vacations) assert.equal((Date.parse(v.end) - Date.parse(v.start)) / 864e5 + 1, 15);
+  assert.equal(prop.reinforcements.length, 8);
+  service.call(admin, 'applyProposal', { year: 2027, vacations: prop.vacations, reinforcements: prop.reinforcements, replace: true });
+  const d = service.call(admin, 'getYear', { year: 2027 });
+  assert.equal(d.periodRules.periodLength, 15);
+  const e = err(() => service.call(admin, 'saveVacation', { year: 2027, worker_id: d.staff[5].worker_id, start: '2027-03-01', end: '2027-03-04' }));
+  assert.match(e.message, /15 días seguidos/);
 });

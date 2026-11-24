@@ -31,6 +31,9 @@ export function liveCheck(data, vacationsAfter, { year = data.year, start, end }
   if (start !== undefined) {
     const err = checkPeriodShape(start, end, year);
     if (err) return [err];
+    const L = data.periodRules?.periodLength || 0;
+    const len = Math.round((Date.parse(end) - Date.parse(start)) / 864e5) + 1;
+    if (L && len !== L) return [`Cada periodo de vacaciones debe ser de ${L} días seguidos.`];
   }
   const base = { year: data.year, staff: data.staff, minimums: data.minimums, reinforcements: data.reinforcements, blocked: data.blocked };
   const before = analyze({ ...base, vacations: data.vacations }).issues;

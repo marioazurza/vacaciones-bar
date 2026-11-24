@@ -18,16 +18,43 @@ function DaysInfo({ data, workerId, vacations }) {
 
 function Check({ problems, okText = 'Las fechas cumplen todos los mínimos de cobertura.' }) {
   if (!problems) return null;
+  const kitchen = problems.some((t) => /Cocina (mañana|tarde): se necesitan/.test(t));
   return problems.length
-    ? <Alert kind="bad" title="No se puede: estas fechas generan conflictos" items={problems} />
+    ? <Alert kind="bad" title="No se puede: estas fechas generan conflictos" items={problems}>
+        {kitchen && <div class="small" style="margin-top:6px">En cocina no puede faltar nadie de viernes a domingo. Para estas fechas hace falta un suplente: se añade en Ajustes → Suplentes (o lo propone el Generador).</div>}
+      </Alert>
     : <Alert kind="ok" title={okText} />;
 }
 
 /** Alta o edición directa de un periodo (solo administrador). */
+/** Duración fija de los periodos (0 = libre). */
+export const fixedLength = (data) => data.periodRules?.periodLength || 0;
+
+/** Selector de fechas: con duración fija solo se elige el primer día. */
+function DateRange({ data, start, end, setStart, setEnd, min, labels = ['Primer día', 'Último día'] }) {
+  const L = fixedLength(data);
+  const max = `${data.year}-12-31`;
+  if (L) {
+    return (
+      <div class="grid2">
+        <Field label={labels[0]}><input class="input" type="date" value={start} min={min} max={max} onInput={(e) => { const v = e.currentTarget.value; setStart(v); if (isISODate(v)) setEnd(addDays(v, L - 1)); }} /></Field>
+        <Field label={`${labels[1]} (${L} días seguidos)`}><input class="input" type="date" value={end} disabled /></Field>
+      </div>
+    );
+  }
+  return (
+    <div class="grid2">
+      <Field label={labels[0]}><input class="input" type="date" value={start} min={min} max={max} onInput={(e) => { const v = e.currentTarget.value; setStart(v); if (v > end) setEnd(v); }} /></Field>
+      <Field label={labels[1]}><input class="input" type="date" value={end} min={start} max={max} onInput={(e) => setEnd(e.currentTarget.value)} /></Field>
+    </div>
+  );
+}
+
 export function VacationModal({ data, initial, onClose, onDone }) {
+  const L = fixedLength(data);
   const [workerId, setWorkerId] = useState(initial.worker_id ?? data.staff[0]?.worker_id);
   const [start, setStart] = useState(initial.start || `${data.year}-01-01`);
-  const [end, setEnd] = useState(initial.end || initial.start || `${data.year}-01-01`);
+  const [end, setEnd] = useState(initial.id ? initial.end : L ? addDays(initial.start || `${data.year}-01-01`, L - 1) : (initial.end || initial.start || `${data.year}-01-01`));
   const editing = !!initial.id;
   const after = useMemo(() => {
     const base = data.vacations.filter((v) => v.id !== initial.id);
@@ -58,10 +85,7 @@ export function VacationModal({ data, initial, onClose, onDone }) {
           {data.staff.map((s) => <option key={s.worker_id} value={s.worker_id}>{s.name} · {groupLabel(s.team, s.shift)}</option>)}
         </select>
       </Field>
-      <div class="grid2">
-        <Field label="Primer día"><input class="input" type="date" value={start} min={`${data.year}-01-01`} max={`${data.year}-12-31`} onInput={(e) => { const v = e.currentTarget.value; setStart(v); if (v > end) setEnd(v); }} /></Field>
-        <Field label="Último día"><input class="input" type="date" value={end} min={start} max={`${data.year}-12-31`} onInput={(e) => setEnd(e.currentTarget.value)} /></Field>
-      </div>
+      <DateRange data={data} start={start} end={end} setStart={setStart} setEnd={setEnd} min={`${data.year}-01-01`} />
       <div class="row"><span class="badge info">{len} días naturales</span><DaysInfo data={data} workerId={Number(workerId)} vacations={after} /></div>
       <Check problems={problems} />
     </Modal>
@@ -73,8 +97,9 @@ export function ChangeRequestModal({ data, me, vacation, onClose, onDone }) {
   const [mode, setMode] = useState(vacation ? 'mover' : 'nuevo');
   const tomorrow = addDays(data.today, 1);
   const minDate = tomorrow > `${data.year}-01-01` ? tomorrow : `${data.year}-01-01`;
+  const L = fixedLength(data);
   const [start, setStart] = useState(vacation?.start > data.today ? vacation.start : minDate);
-  const [end, setEnd] = useState(vacation?.end > data.today ? vacation.end : minDate);
+  const [end, setEnd] = useState(vacation?.end > data.today ? vacation.end : L ? addDays(minDate, L - 1) : minDate);
   const [comment, setComment] = useState('');
   const remove = vacation && mode !== 'nuevo' ? [vacation.id] : [];
   const add = mode === 'anular' ? [] : [{ start, end }];
@@ -104,10 +129,7 @@ export function ChangeRequestModal({ data, me, vacation, onClose, onDone }) {
       )}
       {vacation && <div class="small muted">Periodo actual: <b>{formatRange(vacation.start, vacation.end)}</b> ({periodLength(vacation.start, vacation.end)} días)</div>}
       {mode !== 'anular' && (
-        <div class="grid2">
-          <Field label="Nuevo primer día"><input class="input" type="date" value={start} min={minDate} max={`${data.year}-12-31`} onInput={(e) => { const v = e.currentTarget.value; setStart(v); if (v > end) setEnd(v); }} /></Field>
-          <Field label="Nuevo último día"><input class="input" type="date" value={end} min={start} max={`${data.year}-12-31`} onInput={(e) => setEnd(e.currentTarget.value)} /></Field>
-        </div>
+        <DateRange data={data} start={start} end={end} setStart={setStart} setEnd={setEnd} min={minDate} labels={['Nuevo primer día', 'Nuevo último día']} />
       )}
       <DaysInfo data={data} workerId={me} vacations={after} />
       <Field label="Comentario para el administrador (opcional)"><textarea class="input" rows="2" value={comment} onInput={(e) => setComment(e.currentTarget.value)} /></Field>

@@ -13,7 +13,7 @@ import { dateFromIndex, dayIndex, daysInYear, month, peakSeasons, dow } from './
 export const DEFAULT_GENERATOR_SETTINGS = {
   mode: 'repartir', // 'repartir' (todo el año) | 'verano' (priorizar verano)
   preferredMonths: [], // 0 = enero ... 11 = diciembre
-  split: [15, 10, 5], // reparto deseado de los días en periodos
+  split: [15, 10, 5], // reparto deseado de los días en periodos (si no hay duración fija)
   substitutes: { enabled: true, length: 14 }, // suplentes de cocina para un periodo seguido
   iterations: 40,
 };
@@ -154,7 +154,13 @@ export function generateProposal(ctx, opts = {}) {
       const maxRun = Math.max(0, ...runLengths(w, ok));
       const longest = Math.max(...o.split);
       let segs;
-      if (w.team === 'cocina' && o.substitutes.enabled && maxRun < Math.min(longest, R) && o.substitutes.length > maxRun) {
+      const fixed = Number(o.periodLength) || 0;
+      if (fixed > 0) {
+        // Periodos de duración fija (p. ej. 2 × 15 días). En cocina, si no cabe sin
+        // suplente, cada periodo lleva su suplente.
+        const needSub = maxRun < fixed && o.substitutes.enabled && w.team === 'cocina';
+        segs = Array.from({ length: Math.floor(R / fixed) }, () => ({ len: fixed, sub: needSub, fixed: true }));
+      } else if (w.team === 'cocina' && o.substitutes.enabled && maxRun < Math.min(longest, R) && o.substitutes.length > maxRun) {
         const main = Math.min(o.substitutes.length, R);
         segs = [{ len: main, sub: true, main: true }, ...chunk(R - main, Math.max(1, maxRun)).map((len) => ({ len }))];
       } else if (maxRun > 0 && maxRun < longest) {
@@ -179,6 +185,7 @@ export function generateProposal(ctx, opts = {}) {
       let L = seg.len;
       let maxAvail = 0;
       for (let i = 0; i < N; i++) if (run[i] > maxAvail) maxAvail = run[i];
+      if (seg.fixed && maxAvail < L) continue; // con duración fija no se recorta: quedará pendiente
       if (maxAvail === 0) {
         if (seg.sub) { queue.push({ ...seg, sub: false }); continue; }
         continue; // no cabe: quedará como pendiente

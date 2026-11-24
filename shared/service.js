@@ -12,6 +12,8 @@ import {
 import { generateProposal, DEFAULT_GENERATOR_SETTINGS } from './generator.js';
 import { formatRange, overlaps, periodLength, todayISO, isISODate } from './dates.js';
 
+export const DEFAULT_PERIOD_RULES = { periodLength: 15 };
+
 export class ApiError extends Error {
   constructor(status, message, details = []) {
     super(message);
@@ -49,6 +51,8 @@ export function createService({ repo, hashPassword, verifyPassword, randomToken,
   };
   const minimums = () => normalizeMinimums(setting('minimums', DEFAULT_MINIMUMS));
   const generatorSettings = () => ({ ...DEFAULT_GENERATOR_SETTINGS, ...setting('generator', {}) });
+  // Duración fija de cada periodo de vacaciones (0 = libre).
+  const periodRules = () => ({ ...DEFAULT_PERIOD_RULES, ...setting('periods', {}) });
 
   const workerName = (w) => (w ? `${w.first_name} ${w.last_name}`.trim() : 'Trabajador eliminado');
   const workersById = () => new Map(repo.all('workers').map((w) => [w.id, w]));
@@ -105,6 +109,15 @@ export function createService({ repo, hashPassword, verifyPassword, randomToken,
     if (err) throw new ApiError(400, err);
   }
 
+  /** Periodos de vacaciones: además deben tener la duración fija configurada. */
+  function checkVacationPeriod(start, end, year) {
+    checkPeriod(start, end, year);
+    const L = periodRules().periodLength;
+    if (L > 0 && periodLength(start, end) !== L) {
+      throw new ApiError(400, `Cada periodo de vacaciones debe ser de ${L} días seguidos (este tiene ${periodLength(start, end)}).`);
+    }
+  }
+
   // ---------- semilla inicial ----------
   function seed({ adminUsername = 'admin', adminPassword = 'admin', workerPassword = '1234', withDemoPlan = true } = {}) {
     if (repo.all('users').length) return false;
@@ -114,6 +127,7 @@ export function createService({ repo, hashPassword, verifyPassword, randomToken,
       repo.insert('users', { username: String(adminUsername).trim().toLowerCase(), password_hash: hashPassword(adminPassword), role: 'admin', worker_id: null, created_at: now() });
       setSetting('minimums', DEFAULT_MINIMUMS);
       setSetting('generator', DEFAULT_GENERATOR_SETTINGS);
+      setSetting('periods', DEFAULT_PERIOD_RULES);
       repo.insert('years', { year: thisYear, status: 'publicado', published_at: now() });
       repo.insert('years', { year: planYear, status: 'borrador', published_at: null });
       for (const [first, last, team, shift] of SEED_WORKERS) {
@@ -124,7 +138,7 @@ export function createService({ repo, hashPassword, verifyPassword, randomToken,
       if (withDemoPlan) {
         // Año en curso ya publicado, para poder ver días disfrutados y años anteriores.
         const ctx = ctxFor(thisYear);
-        const prop = generateProposal(ctx, { ...DEFAULT_GENERATOR_SETTINGS, seed: 2024, iterations: 15 });
+        const prop = generateProposal(ctx, { ...DEFAULT_GENERATOR_SETTINGS, ...DEFAULT_PERIOD_RULES, seed: 2024, iterations: 15 });
         for (const r of prop.reinforcements) repo.insert('reinforcements', r);
         for (const v of prop.vacations) repo.insert('vacations', { ...v, year: thisYear, note: '', created_at: now() });
       }
@@ -148,7 +162,7 @@ export function createService({ repo, hashPassword, verifyPassword, randomToken,
   const ADMIN = new Set([
     'createYear', 'publishYear', 'unpublishYear', 'saveWorker', 'removeWorker', 'saveVacation', 'deleteVacation',
     'generate', 'applyProposal', 'saveMinimums', 'saveGeneratorSettings', 'saveBlocked', 'deleteBlocked',
-    'saveReinforcement', 'deleteReinforcement', 'resolveRequest', 'listHistory', 'clearVacations',
+    'saveReinforcement', 'deleteReinforcement', 'savePeriodRules', 'resolveRequest', 'listHistory', 'clearVacations',
   ]);
 
   function call(token, action, params = {}) {
@@ -223,6 +237,7 @@ export function createService({ repo, hashPassword, verifyPassword, randomToken,
         preferences: repo.all('preferences', { year }).filter((p) => isAdmin || p.worker_id === user.worker_id),
         requests: reqs.sort((a, b) => (a.created_at < b.created_at ? 1 : -1)),
         generator: isAdmin ? generatorSettings() : null,
+        periodRules: periodRules(),
         unread: repo.all('notifications', { user_id: user.id }).filter((n) => !n.read).length,
         pendingRequests: isAdmin ? repo.all('requests', { status: 'pendiente' }).length : 0,
         today: today(),
@@ -329,7 +344,7 @@ export function createService({ repo, hashPassword, verifyPassword, randomToken,
     saveVacation({ id, year, worker_id, start, end, note }, user) {
       year = Number(year); worker_id = Number(worker_id);
       requireYear(year);
-      checkPeriod(start, end, year);
+      checkVacationPeriod(start, end, year);
       if (!repo.all('staff', { year, worker_id }).length) throw new ApiError(400, 'El trabajador no está en la plantilla de este año.');
       let vacations = repo.all('vacations', { year });
       const prev = id ? vacations.find((v) => v.id === Number(id)) : null;
@@ -378,6 +393,7 @@ export function createService({ repo, hashPassword, verifyPassword, randomToken,
       const notBefore = today() > `${year}-01-01` ? today() : null;
       const prop = generateProposal(ctx, {
         ...gs,
+        ...periodRules(),
         keepExisting,
         notBefore: notBefore && notBefore > `${year}-12-31` ? `${year + 1}-01-01` : notBefore,
         preferences: repo.all('preferences', { year }),
@@ -390,7 +406,7 @@ export function createService({ repo, hashPassword, verifyPassword, randomToken,
       year = Number(year);
       requireYear(year);
       const clean = (vacations || []).map((v) => {
-        checkPeriod(v.start, v.end, year);
+        checkVacationPeriod(v.start, v.end, year);
         return { year, worker_id: Number(v.worker_id), start: v.start, end: v.end };
       });
       const reins = (reinforcements || []).map((r) => {
@@ -429,6 +445,14 @@ export function createService({ repo, hashPassword, verifyPassword, randomToken,
       setSetting('generator', s);
       log(user, null, 'Ajustes del generador', `Modo ${s.mode}, reparto ${s.split.join('+')}, suplentes ${s.substitutes.enabled ? `sí (${s.substitutes.length} días)` : 'no'}.`);
       return s;
+    },
+
+    savePeriodRules({ periodLength: L }, user) {
+      L = Math.floor(Number(L) || 0);
+      if (L < 0 || L > 31) throw new ApiError(400, 'La duración debe estar entre 1 y 31 días, o 0 para dejarla libre.');
+      setSetting('periods', { periodLength: L });
+      log(user, null, 'Duración de los periodos', L ? `Cada periodo de vacaciones dura ${L} días seguidos.` : 'Duración de los periodos libre.');
+      return { periodLength: L };
     },
 
     saveBlocked({ id, year, start, end, reason }, user) {
@@ -518,7 +542,7 @@ export function createService({ repo, hashPassword, verifyPassword, randomToken,
         if (v.start <= today()) throw new ApiError(400, `El periodo ${formatRange(v.start, v.end)} ya ha empezado y no se puede cambiar.`);
       }
       const adds = add.map((a) => {
-        checkPeriod(a.start, a.end, year);
+        checkVacationPeriod(a.start, a.end, year);
         if (a.start <= today()) throw new ApiError(400, 'Las nuevas fechas deben ser posteriores a hoy.');
         return { start: a.start, end: a.end };
       });

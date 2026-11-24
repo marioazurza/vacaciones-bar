@@ -94,7 +94,7 @@ export function YearView({ cal, filters, onDay, onMonth }) {
 }
 
 // ---------- Vista mensual (filas por trabajador) ----------
-export function MonthView({ cal, filters, month, onDay, onBar, onPick, previewIds }) {
+export function MonthView({ cal, filters, month, onDay, onBar, onPick, previewIds, fixedLength = 0 }) {
   const [sel, setSel] = useState(null);
   const n = daysInMonth(cal.year, month);
   const first = `${cal.year}-${String(month + 1).padStart(2, '0')}-01`;
@@ -133,6 +133,7 @@ export function MonthView({ cal, filters, month, onDay, onBar, onPick, previewId
             style={{ gridRow: r, gridColumn: 2 + d }}
             title={onPick ? (sel ? 'Haz clic en el último día del periodo' : 'Haz clic en el primer día del periodo') : ''}
             onClick={onPick ? () => {
+              if (fixedLength) { onPick(s.worker_id, date, addDays(date, fixedLength - 1)); return; }
               if (!sel || sel.worker_id !== s.worker_id) setSel({ worker_id: s.worker_id, date });
               else { const a = sel.date < date ? sel.date : date, b = sel.date < date ? date : sel.date; setSel(null); onPick(s.worker_id, a, b); }
             } : null} />,
@@ -174,7 +175,7 @@ export function MonthView({ cal, filters, month, onDay, onBar, onPick, previewId
   if (!staff.length) return <div class="card empty">No hay trabajadores con estos filtros.</div>;
   return (
     <div class="stack">
-      {onPick && <div class="small muted">{sel ? `Primer día: ${formatDate(sel.date)}. Ahora haz clic en el último día del periodo en la misma fila.` : 'Para añadir vacaciones, haz clic en el primer y el último día en la fila del trabajador. Haz clic en una barra para editarla.'}</div>}
+      {onPick && <div class="small muted">{fixedLength ? `Para añadir vacaciones, haz clic en el primer día en la fila del trabajador (se cogen ${fixedLength} días seguidos). Haz clic en una barra para editarla.` : sel ? `Primer día: ${formatDate(sel.date)}. Ahora haz clic en el último día del periodo en la misma fila.` : 'Para añadir vacaciones, haz clic en el primer y el último día en la fila del trabajador. Haz clic en una barra para editarla.'}</div>}
       <div class="gantt-wrap"><div class="gantt" style={{ gridTemplateColumns: cols }}>{items}</div></div>
     </div>
   );

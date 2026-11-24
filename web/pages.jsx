@@ -50,7 +50,7 @@ export function CalendarPage({ data, reload, isAdmin, me }) {
       {view === 'year' && <YearView cal={cal} filters={filters} onDay={setDay} onMonth={goMonth} />}
       {view === 'month' && <MonthView cal={cal} filters={filters} month={m} onDay={setDay}
         onBar={isAdmin ? (v) => setEdit(v) : null}
-        onPick={isAdmin ? (worker_id, start, end) => setEdit({ worker_id, start, end }) : null} />}
+        onPick={isAdmin ? (worker_id, start, end) => setEdit({ worker_id, start, end }) : null} fixedLength={data.periodRules?.periodLength || 0} />}
       {view === 'week' && <WeekView cal={cal} filters={filters} start={wk} onDay={setDay} />}
       {day && <DayModal cal={cal} date={day} onClose={() => setDay(null)} canEdit={isAdmin} onAdd={(d) => { setDay(null); setEdit({ start: d, end: d }); }} />}
       {edit && <VacationModal data={data} initial={edit} onClose={() => setEdit(null)} onDone={reload} />}
@@ -93,7 +93,7 @@ export function MyVacationsPage({ data, reload, me }) {
       <div class="card">
         <div class="card-head"><h2>Mis periodos</h2><span class="spacer" />
           {published && <button class="btn sm" onClick={() => setSwap({})}>⇄ Proponer intercambio</button>}
-          {published && st.unassigned > 0 && <button class="btn primary sm" onClick={() => setChange({})}>＋ Pedir días</button>}
+          {published && st.unassigned >= Math.max(1, data.periodRules?.periodLength || 0) && <button class="btn primary sm" onClick={() => setChange({})}>＋ Pedir días</button>}
         </div>
         {!published ? <div class="empty">El calendario de {data.year} todavía no está publicado.</div>
           : !mine.length ? <div class="empty">No tienes vacaciones asignadas este año.</div>
@@ -324,7 +324,11 @@ export function GeneratorPage({ data, reload }) {
         <Field label="Meses preferentes (opcional)">
           <div class="month-chips">{MONTHS_SHORT.map((t, i) => <button key={i} type="button" class={s.preferredMonths.includes(i) ? 'on' : ''} onClick={() => toggleMonth(i)}>{t}</button>)}</div>
         </Field>
-        <div class="grid2">
+        {data.periodRules?.periodLength ? (
+          <Alert kind="info" title={`Cada trabajador tendrá periodos de ${data.periodRules.periodLength} días seguidos.`}>
+            <div class="small">Con 30 días, son 2 periodos. En cocina no puede faltar nadie el fin de semana, así que el generador propone un suplente para cada periodo de cada cocinero. Puedes cambiar la duración en Ajustes.</div>
+          </Alert>
+        ) : <div class="grid2">
           <Field label="Reparto de los días en periodos (ej.: 15, 10, 5)">
             <input class="input" value={s.split.join(', ')} onChange={(e) => setS({ ...s, split: e.currentTarget.value.split(/[,+ ]+/).map(Number).filter((x) => x > 0) })} />
           </Field>
@@ -334,7 +338,8 @@ export function GeneratorPage({ data, reload }) {
               <input class="input" type="number" min="5" max="31" style="width:70px" value={s.substitutes.length} onInput={(e) => setS({ ...s, substitutes: { ...s.substitutes, length: Number(e.currentTarget.value) } })} /> días
             </div>
           </Field>
-        </div>
+        </div>}
+        {data.periodRules?.periodLength > 0 && <label class="row"><input type="checkbox" checked={s.substitutes.enabled} onChange={(e) => setS({ ...s, substitutes: { ...s.substitutes, enabled: e.currentTarget.checked } })} /> Proponer suplentes en cocina</label>}
         <label class="row"><input type="checkbox" checked={keep} onChange={(e) => setKeep(e.currentTarget.checked)} /> Mantener las vacaciones que ya están en el calendario y repartir solo los días pendientes</label>
         <div class="small muted">Sin suplente, en cocina no puede faltar nadie de viernes a domingo, así que sus vacaciones irán en bloques de lunes a jueves. Las fechas bloqueadas y las preferencias de cada trabajador se tienen en cuenta.</div>
         <div class="row"><button class="btn primary" disabled={busy} onClick={generate}>{busy ? 'Calculando…' : prop ? '↻ Generar otra propuesta' : '✨ Generar propuesta'}</button></div>
@@ -395,6 +400,7 @@ export function SettingsPage({ data, reload }) {
   return (
     <>
       <div class="row"><h1>Ajustes</h1><span class="spacer" /><a class="btn sm" href="#historial">🕘 Historial de cambios</a></div>
+      <PeriodCard data={data} reload={reload} />
       <div class="card">
         <div class="card-head"><h2>Mínimos de cobertura</h2><span class="spacer" />
           {changed && <button class="btn" onClick={() => setMins(data.minimums)}>Deshacer</button>}
@@ -447,6 +453,26 @@ export function SettingsPage({ data, reload }) {
         </div></>}
         onClose={() => setSub(null)} onSave={(f) => api('saveReinforcement', f)} onDone={reload} />}
     </>
+  );
+}
+
+function PeriodCard({ data, reload }) {
+  const [L, setL] = useState(data.periodRules?.periodLength ?? 15);
+  useEffect(() => setL(data.periodRules?.periodLength ?? 15), [data]);
+  const fixed = L > 0;
+  const save = async (v) => (await run(() => api('savePeriodRules', { periodLength: v }), 'Guardado')) && reload();
+  return (
+    <div class="card stack">
+      <div class="card-head" style="margin:0"><h2>Periodos de vacaciones</h2></div>
+      <label class="row"><input type="checkbox" checked={fixed} onChange={(e) => { const v = e.currentTarget.checked ? 15 : 0; setL(v); save(v); }} /> Todos los periodos tienen la misma duración</label>
+      {fixed && (
+        <div class="row">Cada periodo dura
+          <input class="input" type="number" min="1" max="31" style="width:70px" value={L} onInput={(e) => setL(Number(e.currentTarget.value))} /> días seguidos
+          {L !== data.periodRules?.periodLength && <button class="btn primary sm" onClick={() => save(L)}>Guardar</button>}
+        </div>
+      )}
+      <div class="small muted">{fixed ? `Al elegir fechas solo se indica el primer día. Las vacaciones que ya están en el calendario no cambian.` : 'Cada periodo puede tener cualquier duración.'}</div>
+    </div>
   );
 }
 
