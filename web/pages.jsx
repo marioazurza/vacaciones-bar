@@ -34,6 +34,8 @@ export function CalendarPage({ data, reload, isAdmin, me }) {
       <div class="row">
         <h1>Calendario {data.year}</h1>
         <span class="spacer" />
+        {view === 'month' && <div class="row"><button class="btn sm" onClick={() => setM((m + 11) % 12)}>‹</button><b style="min-width:90px;text-align:center">{MONTHS[m]}</b><button class="btn sm" onClick={() => setM((m + 1) % 12)}>›</button></div>}
+        {view === 'week' && <div class="row"><button class="btn sm" onClick={() => setWk(addDays(wk, -7))}>‹</button><b style="min-width:150px;text-align:center">{formatRange(wk, addDays(wk, 6))}</b><button class="btn sm" onClick={() => setWk(addDays(wk, 7))}>›</button></div>}
         <div class="seg">
           {[['year', 'Año'], ['month', 'Mes'], ['week', 'Semana']].map(([k, t]) => <button key={k} class={view === k ? 'on' : ''} onClick={() => setView(k)}>{t}</button>)}
         </div>
@@ -42,13 +44,10 @@ export function CalendarPage({ data, reload, isAdmin, me }) {
       {issues.length > 0 && (
         <Alert kind="bad" title={`Hay ${issues.length} conflicto${issues.length > 1 ? 's' : ''} en el calendario`} items={issues.slice(0, 5).map((i) => describeIssue(i, nameOf)).concat(issues.length > 5 ? [`… y ${issues.length - 5} más`] : [])} />
       )}
-      <div class="row">
+      <div class="row cal-tools">
         <Filters staff={data.staff} value={filters} onChange={setFilters} />
-        <span class="spacer" />
-        {view === 'month' && <div class="row"><button class="btn sm" onClick={() => setM((m + 11) % 12)}>‹</button><b style="min-width:90px;text-align:center">{MONTHS[m]}</b><button class="btn sm" onClick={() => setM((m + 1) % 12)}>›</button></div>}
-        {view === 'week' && <div class="row"><button class="btn sm" onClick={() => setWk(addDays(wk, -7))}>‹</button><b style="min-width:150px;text-align:center">{formatRange(wk, addDays(wk, 6))}</b><button class="btn sm" onClick={() => setWk(addDays(wk, 7))}>›</button></div>}
+        <Legend conflicts={issues.length > 0} />
       </div>
-      <Legend />
       {view === 'year' && <YearView cal={cal} filters={filters} onDay={setDay} onMonth={goMonth} />}
       {view === 'month' && <MonthView cal={cal} filters={filters} month={m} onMonth={setM} onDay={setDay}
         onBar={isAdmin ? (v) => setEdit(v) : null}

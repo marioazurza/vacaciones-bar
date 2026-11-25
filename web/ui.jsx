@@ -125,7 +125,7 @@ export function ShiftTag({ shift }) {
   return <span class={`shift-tag ${shift}`}>{shift === 'M' ? '☀️ Mañana' : '🌙 Tarde'}</span>;
 }
 
-export function Legend() {
+export function Legend({ conflicts = true }) {
   return (
     <div class="legend">
       <ShiftTag shift="M" />
@@ -135,8 +135,7 @@ export function Legend() {
       <ShiftTag shift="T" />
       <span><i class="chip-k c-cocina-t">C</i> 🍳 Cocina</span>
       <span><i class="chip-k c-sala-t">S</i> 🍽️ Camareros</span>
-      <i class="sep" />
-      <span class="muted"><i class="dot" style="background:var(--bad)" /> Si un día sale en rojo, incumple una regla</span>
+      {conflicts && <><i class="sep" /><span class="muted"><i class="dot" style="background:var(--bad)" /> Si un día sale en rojo, incumple una regla</span></>}
     </div>
   );
 }
