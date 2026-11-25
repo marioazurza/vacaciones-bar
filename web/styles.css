@@ -308,3 +308,11 @@ table.table { width: 100%; border-collapse: collapse; }
 .topbar select.input, .topbar .btn { padding-top: 5px; padding-bottom: 5px; }
 .content { padding-top: 10px; padding-bottom: 8px; gap: 10px; }
 .gantt.months .g-cov { letter-spacing: -0.3px; }
+.g-head.fest { background: var(--fest-soft); }
+.g-head.fest b { color: var(--fest); }
+.dcell.fest .n { color: var(--fest); font-weight: 800; text-decoration: underline; text-underline-offset: 2px; }
+.dcell.fest { background: var(--fest-soft); }
+.fest-mark { font-style: normal; font-weight: 800; font-size: 11px; color: var(--fest); background: var(--fest-soft); border-radius: 4px; padding: 0 3px; text-decoration: underline; }
+:root { --fest: #c026d3; --fest-soft: #fae8ff; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --fest: #e879f9; --fest-soft: #3b1a40; } }
+:root[data-theme="dark"] { --fest: #e879f9; --fest-soft: #3b1a40; }

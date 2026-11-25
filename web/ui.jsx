@@ -135,6 +135,8 @@ export function Legend({ conflicts = true }) {
       <ShiftTag shift="T" />
       <span><i class="chip-k c-cocina-t">C</i> 🍳 Cocina</span>
       <span><i class="chip-k c-sala-t">S</i> 🍽️ Camareros</span>
+      <i class="sep" />
+      <span><i class="fest-mark">15</i> Festivo en Zarautz</span>
       {conflicts && <><i class="sep" /><span class="muted"><i class="dot" style="background:var(--bad)" /> Si un día sale en rojo, incumple una regla</span></>}
     </div>
   );

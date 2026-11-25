@@ -5,6 +5,7 @@ import {
 } from '../shared/dates.js';
 import { GROUPS, colorClass, groupLabel, SHIFTS, TEAMS } from '../shared/rules.js';
 import { Modal, GroupDot, Alert, ShiftTag } from './ui.jsx';
+import { holidayName } from '../shared/holidays.js';
 
 /** Grupos y trabajadores que pasan los filtros. */
 export function applyFilters(staff, f) {
@@ -76,8 +77,8 @@ export function YearView({ cal, filters, onDay, onMonth }) {
                 const date = dateFromIndex(cal.year, i);
                 const info = dayInfo(cal, i, visible);
                 const we = dow(date) >= 4;
-                const cls = ['dcell', we && 'we', info.bad && 'bad', cal.analysis.blockedDay[i] && 'blocked', date === cal.today && 'today'].filter(Boolean).join(' ');
-                const title = `${formatDate(date, { weekday: true })}${info.marks.length ? `\nDe vacaciones: ${info.marks.map((x) => nameOf(x.id)).join(', ')}` : ''}${info.bad ? '\n⚠ Falta personal' : ''}`;
+                const cls = ['dcell', we && 'we', holidayName(date) && 'fest', info.bad && 'bad', cal.analysis.blockedDay[i] && 'blocked', date === cal.today && 'today'].filter(Boolean).join(' ');
+                const title = `${formatDate(date, { weekday: true })}${holidayName(date) ? `\nFestivo: ${holidayName(date)}` : ''}${info.marks.length ? `\nDe vacaciones: ${info.marks.map((x) => nameOf(x.id)).join(', ')}` : ''}${info.bad ? '\n⚠ Falta personal' : ''}`;
                 return (
                   <div class={cls} key={d} title={title} onClick={() => onDay(date)}>
                     <span class="n">{d + 1}</span>
@@ -114,7 +115,7 @@ function TimelineView({ cal, filters, from, n, title, wide, onDay, onBar, onPick
   items.push(<div class="g-name" style={{ gridRow: 1, gridColumn: 1, zIndex: 4 }} key="hn"><b>{title}</b></div>);
   days.forEach((date, d) => {
     items.push(
-      <div key={`h${d}`} data-date={date} class={`g-head ${dow(date) >= 4 ? 'we' : ''} ${date === cal.today ? 'today' : ''} ${months && date.endsWith('-01') ? 'mstart' : ''}`} style={{ gridRow: 1, gridColumn: 2 + d }} onClick={() => inYear(date) && onDay(date)}>
+      <div key={`h${d}`} data-date={date} class={`g-head ${dow(date) >= 4 ? 'we' : ''} ${holidayName(date) ? 'fest' : ''} ${date === cal.today ? 'today' : ''} ${months && date.endsWith('-01') ? 'mstart' : ''}`} title={holidayName(date) ? `Festivo: ${holidayName(date)}` : undefined} style={{ gridRow: 1, gridColumn: 2 + d }} onClick={() => inYear(date) && onDay(date)}>
         {months && <i class="g-month">{date.endsWith('-01') ? MONTHS[Number(date.slice(5, 7)) - 1] : '\u00a0'}</i>}
         {wide ? WEEKDAYS[dow(date)] : WEEKDAYS_SHORT[dow(date)]}<b>{Number(date.slice(8, 10))}</b>
       </div>,
@@ -268,6 +269,7 @@ export function DayModal({ cal, date, onClose, canEdit, onAdd }) {
   const blocked = cal.analysis.blockedDay[i];
   return (
     <Modal title={formatDate(date, { weekday: true })} onClose={onClose} footer={<button class="btn" onClick={onClose}>Cerrar</button>}>
+      {holidayName(date) && <Alert kind="info" title={`Festivo: ${holidayName(date)}`} />}
       {blocked && <Alert kind="warn" title="Fecha bloqueada">{blocked.reason ? ` ${blocked.reason}` : ''}</Alert>}
       {GROUPS.map((g) => {
         const G = cal.analysis.groups[g.key];
