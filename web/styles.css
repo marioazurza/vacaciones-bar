@@ -316,3 +316,25 @@ table.table { width: 100%; border-collapse: collapse; }
 :root { --fest: #c026d3; --fest-soft: #fae8ff; }
 @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --fest: #e879f9; --fest-soft: #3b1a40; } }
 :root[data-theme="dark"] { --fest: #e879f9; --fest-soft: #3b1a40; }
+/* Móvil: el mes entero en el ancho de la pantalla */
+.gantt.months.tiny .g-head { font-size: 0; padding: 2px 0; }
+.gantt.months.tiny .g-head { overflow: visible; }
+.gantt.months.tiny .g-head b { font-size: 9px; letter-spacing: -0.4px; white-space: nowrap; overflow: visible; }
+.gantt.months.tiny .g-head .g-month { display: none; }
+.gantt.months.tiny .g-name { padding: 0 4px; gap: 3px; font-size: 10px; }
+.gantt.months.tiny .g-name .dot { width: 6px; height: 6px; }
+.gantt.months.tiny .g-bar { padding: 0 3px; font-size: 9px; border-radius: 4px; margin: 2px 0; }
+.gantt.months.tiny .g-group, .gantt.months.tiny .shift-band { font-size: 9px; padding-left: 6px; }
+.gantt.months.tiny .g-cov.full { background: var(--warn-soft); }
+.gantt.months.tiny .g-name.small { font-size: 9px; }
+@media (max-width: 599px) {
+  .cal-h1 { display: none; }
+  .legend .lt { display: none; }
+  .cal-tools { gap: 6px 10px; }
+  .cal-tools .filters { display: flex; gap: 4px; width: 100%; flex-wrap: nowrap; }
+  .cal-tools .filters select.input { flex: 1 1 0; min-width: 0; font-size: 12px; padding: 4px 4px; }
+  .cal-tools .legend { gap: 6px; font-size: 11px; }
+  .cal-tools .legend .sep { margin: 0 1px; }
+}
+.gantt.months.tiny .g-head.num, .gantt.months.tiny .g-head.mstart { z-index: 3; }
+.legend > span { white-space: nowrap; }

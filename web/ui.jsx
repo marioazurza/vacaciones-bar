@@ -129,14 +129,14 @@ export function Legend({ conflicts = true }) {
   return (
     <div class="legend">
       <ShiftTag shift="M" />
-      <span><i class="chip-k c-cocina-m">C</i> 🍳 Cocina</span>
-      <span><i class="chip-k c-sala-m">S</i> 🍽️ Camareros</span>
+      <span><i class="chip-k c-cocina-m">C</i><span class="lt"> 🍳 Cocina</span></span>
+      <span><i class="chip-k c-sala-m">S</i><span class="lt"> 🍽️ Camareros</span></span>
       <i class="sep" />
       <ShiftTag shift="T" />
-      <span><i class="chip-k c-cocina-t">C</i> 🍳 Cocina</span>
-      <span><i class="chip-k c-sala-t">S</i> 🍽️ Camareros</span>
+      <span><i class="chip-k c-cocina-t">C</i><span class="lt"> 🍳 Cocina</span></span>
+      <span><i class="chip-k c-sala-t">S</i><span class="lt"> 🍽️ Camareros</span></span>
       <i class="sep" />
-      <span><i class="fest-mark">15</i> Festivo en Zarautz</span>
+      <span><i class="fest-mark">15</i> Festivo</span>
       {conflicts && <><i class="sep" /><span class="muted"><i class="dot" style="background:var(--bad)" /> Si un día sale en rojo, incumple una regla</span></>}
     </div>
   );

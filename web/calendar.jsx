@@ -105,6 +105,7 @@ function TimelineView({ cal, filters, from, n, title, wide, onDay, onBar, onPick
   const days = Array.from({ length: n }, (_, k) => addDays(from, k));
   const staff = applyFilters(cal.staff, filters);
   const nameCol = fit?.nameCol || 170;
+  const tiny = !!fit?.tiny;
   const cols = months ? `${nameCol}px repeat(${n}, var(--colw, 34px))` : wide ? `minmax(110px, 190px) repeat(${n}, minmax(72px, 1fr))` : `minmax(150px, 190px) repeat(${n}, minmax(32px, 1fr))`;
   const col = (date) => 2 + diffDays(from, date);
   // Si hay máximo por turno y ningún mínimo, la fila resumen muestra cuántos faltan.
@@ -115,9 +116,9 @@ function TimelineView({ cal, filters, from, n, title, wide, onDay, onBar, onPick
   items.push(<div class="g-name" style={{ gridRow: 1, gridColumn: 1, zIndex: 4 }} key="hn"><b>{title}</b></div>);
   days.forEach((date, d) => {
     items.push(
-      <div key={`h${d}`} data-date={date} class={`g-head ${dow(date) >= 4 ? 'we' : ''} ${holidayName(date) ? 'fest' : ''} ${date === cal.today ? 'today' : ''} ${months && date.endsWith('-01') ? 'mstart' : ''}`} title={holidayName(date) ? `Festivo: ${holidayName(date)}` : undefined} style={{ gridRow: 1, gridColumn: 2 + d }} onClick={() => inYear(date) && onDay(date)}>
+      <div key={`h${d}`} data-date={date} class={`g-head ${dow(date) >= 4 ? 'we' : ''} ${holidayName(date) ? 'fest' : ''} ${date === cal.today ? 'today' : ''} ${months && date.endsWith('-01') ? 'mstart' : ''} ${dow(date) === 0 || holidayName(date) ? 'num' : ''}`} title={holidayName(date) ? `Festivo: ${holidayName(date)}` : undefined} style={{ gridRow: 1, gridColumn: 2 + d }} onClick={() => inYear(date) && onDay(date)}>
         {months && <i class="g-month">{date.endsWith('-01') ? MONTHS[Number(date.slice(5, 7)) - 1] : '\u00a0'}</i>}
-        {wide ? WEEKDAYS[dow(date)] : WEEKDAYS_SHORT[dow(date)]}<b>{Number(date.slice(8, 10))}</b>
+        {tiny ? '' : wide ? WEEKDAYS[dow(date)] : WEEKDAYS_SHORT[dow(date)]}<b>{tiny && !(dow(date) === 0 || date.endsWith('-01') || holidayName(date)) ? '\u00a0' : Number(date.slice(8, 10))}</b>
       </div>,
     );
   });
@@ -139,7 +140,7 @@ function TimelineView({ cal, filters, from, n, title, wide, onDay, onBar, onPick
     items.push(<div class="g-group" style={{ gridRow: row++ }} key={`g${g.key}`}><span class="stick"><GroupDot team={g.team} shift={g.shift} /> {TEAMS[g.team]} <span class="muted" style="text-transform:none;font-weight:500">· {SHIFTS[g.shift].toLowerCase()} · {members.length} personas</span></span></div>);
     for (const s of members) {
       const r = row++;
-      items.push(<div class="g-name" style={{ gridRow: r, gridColumn: 1 }} key={`n${s.worker_id}`} title={s.name}><span class={`dot ${colorClass(s.team, s.shift)}`} />{s.name}</div>);
+      items.push(<div class="g-name" style={{ gridRow: r, gridColumn: 1 }} key={`n${s.worker_id}`} title={s.name}><span class={`dot ${colorClass(s.team, s.shift)}`} />{tiny ? s.first_name.split(' ')[0] : s.name}</div>);
       days.forEach((date, d) => {
         const ok = inYear(date);
         const i = ok ? dayIndex(date, cal.year) : -1;
@@ -160,7 +161,7 @@ function TimelineView({ cal, filters, from, n, title, wide, onDay, onBar, onPick
         if (v.worker_id !== s.worker_id || v.end < from || v.start > last) continue;
         const len = periodLength(v.start, v.end);
         const ico = s.team === 'cocina' ? '🍳' : '🍽️';
-        const label = wide ? `${ico} ${s.first_name} · ${formatRange(v.start, v.end)} (${len} días)` : months ? <span class="stick-bar">{ico} {s.first_name} · {formatRange(v.start, v.end)} ({len} días)</span> : `${ico} ${s.first_name} · ${len}d`;
+        const label = wide ? `${ico} ${s.first_name} · ${formatRange(v.start, v.end)} (${len} días)` : months ? <span class="stick-bar">{tiny ? s.first_name.split(' ')[0] : <>{ico} {s.first_name} · {formatRange(v.start, v.end)} ({len} días)</>}</span> : `${ico} ${s.first_name} · ${len}d`;
         bar(`v${v.id}`, r, v.start, v.end, `g-bar ${colorClass(s.team, s.shift)} ${previewIds?.has(v.id) ? 'preview' : ''} ${onBar ? '' : 'ro'}`,
           label, `${s.name}: ${formatRange(v.start, v.end)} (${len} días)`, onBar ? (e) => { e.stopPropagation(); onBar(v); } : null);
       }
@@ -173,12 +174,12 @@ function TimelineView({ cal, filters, from, n, title, wide, onDay, onBar, onPick
       subs.forEach((x, k) => bar(`s${g.key}${k}`, r, x.start, x.end, `g-bar sub ${colorClass(g.team, g.shift)}`, wide ? `${x.note || 'Suplente'} · ${formatRange(x.start, x.end)}` : (x.note || 'Suplente'), `${x.note || 'Suplente'}: ${formatRange(x.start, x.end)}`, null));
     }
     const r = row++;
-    items.push(<div class="g-name small muted" style={{ gridRow: r, gridColumn: 1 }} key={`cv${g.key}`}>{byMax ? ((cal.periodRules?.wholeTeam || []).includes(g.team) ? `Toda ${g.team === 'sala' ? 'la sala' : 'la cocina'} / máximo` : 'De vacaciones / máximo') : wide ? 'Trabajando / mínimo' : 'Disponibles / mínimo'}</div>);
+    items.push(<div class="g-name small muted" style={{ gridRow: r, gridColumn: 1 }} key={`cv${g.key}`}>{tiny ? (byMax ? 'Vacac.' : 'Disp.') : byMax ? ((cal.periodRules?.wholeTeam || []).includes(g.team) ? `Toda ${g.team === 'sala' ? 'la sala' : 'la cocina'} / máximo` : 'De vacaciones / máximo') : wide ? 'Trabajando / mínimo' : 'Disponibles / mínimo'}</div>);
     days.forEach((date, d) => {
       if (!inYear(date)) { items.push(<div key={`cv${g.key}${d}`} class="g-cov" style={{ gridRow: r, gridColumn: 2 + d }} />); return; }
       const i = dayIndex(date, cal.year);
       const cls = G.problem[i] > 0 ? 'bad' : G.room[i] <= 0 && G.off[i].length ? 'full' : 'ok';
-      const txt = byMax ? (wide ? `${G.offCount[i]} de ${G.allowedOff[i]}` : `${G.offCount[i]}/${G.allowedOff[i]}`) : (wide ? `${G.available[i]} de ${G.need[i]}` : `${G.available[i]}/${G.need[i]}`);
+      const txt = tiny ? '' : byMax ? (wide ? `${G.offCount[i]} de ${G.allowedOff[i]}` : `${G.offCount[i]}/${G.allowedOff[i]}`) : (wide ? `${G.available[i]} de ${G.need[i]}` : `${G.available[i]}/${G.need[i]}`);
       items.push(<div key={`cv${g.key}${d}`} class={`g-cov ${cls}`} style={{ gridRow: r, gridColumn: 2 + d }} onClick={() => onDay(date)} title="Ver el día">{txt}</div>);
     });
   }
@@ -186,7 +187,7 @@ function TimelineView({ cal, filters, from, n, title, wide, onDay, onBar, onPick
   return (
     <div class="stack">
       {onPick && (!months || sel) && <div class="small muted">{fixedLength ? `Para añadir vacaciones, haz clic en el primer día en la fila del trabajador (se cogen ${fixedLength} días seguidos). Haz clic en una barra para editarla.` : sel ? `Primer día: ${formatDate(sel.date)}. Ahora haz clic en el último día del periodo en la misma fila.` : 'Para añadir vacaciones, haz clic en el primer y el último día en la fila del trabajador. Haz clic en una barra para editarla.'}</div>}
-      <div class="gantt-wrap" ref={wrapRef} onScroll={onScroll}><div class={`gantt ${wide ? 'wide' : ''} ${months ? 'months' : ''}`} data-rows={row} style={{ gridTemplateColumns: cols, ...(fit ? { '--colw': `${fit.colW}px`, '--rowh': `${fit.rowH}px`, '--namew': `${nameCol}px` } : {}) }}>{items}</div></div>
+      <div class="gantt-wrap" ref={wrapRef} onScroll={onScroll}><div class={`gantt ${wide ? 'wide' : ''} ${months ? 'months' : ''} ${tiny ? 'tiny' : ''}`} data-rows={row} style={{ gridTemplateColumns: cols, ...(fit ? { '--colw': `${fit.colW}px`, '--rowh': `${fit.rowH}px`, '--namew': `${nameCol}px` } : {}) }}>{items}</div></div>
     </div>
   );
 }
@@ -215,21 +216,23 @@ export function MonthView({ cal, month, onMonth, ...rest }) {
       const g = el?.firstChild;
       if (!g) return;
       const W = window.innerWidth;
-      const nameCol = W < 600 ? 130 : W < 1200 ? 150 : 170;
+      const tiny = W < 600; // móvil: el mes entero a lo ancho, con nombres cortos
+      const nameCol = tiny ? 62 : W < 1200 ? 150 : 170;
       const days = daysInMonth(cal.year, month);
-      const colW = Math.max(W < 600 ? 24 : 18, Math.min(64, Math.floor((el.clientWidth - nameCol - 2) / days)));
+      const colW = Math.max(tiny ? 8 : 18, Math.min(64, Math.floor((el.clientWidth - nameCol - 2) / days)));
       const rows = Number(g.dataset.rows) || 20;
       const top = el.getBoundingClientRect().top;
-      const avail = window.innerHeight - top - 12;
+      const navH = document.querySelector('.bottom-nav')?.offsetHeight || 0;
+      const avail = window.innerHeight - top - 12 - (getComputedStyle(document.querySelector('.bottom-nav') || document.body).display === 'none' ? 0 : navH);
       const headH = g.querySelector('.g-head')?.offsetHeight || 42;
-      const base = Math.max(18, Math.min(40, Math.floor((avail - headH - 4) / Math.max(1, rows - 2))));
+      const base = Math.max(tiny ? 16 : 18, Math.min(40, Math.floor((avail - headH - 4) / Math.max(1, rows - 2))));
       const sig = `${window.innerWidth}x${window.innerHeight}|${rows}|${month}`;
       if (shrink.current.sig !== sig) shrink.current = { sig, n: 0 };
       // Si aun así sobresale (filas con contenido más alto), se reduce un poco más (nunca vuelve a crecer).
       const over = el.getBoundingClientRect().bottom - (window.innerHeight - 8);
       if (fitRef.current && over > 0 && fitRef.current.rowH > 18 && shrink.current.n < 10) shrink.current.n++;
-      const rowH = Math.max(18, base - shrink.current.n);
-      setFit((f) => (f && f.colW === colW && f.rowH === rowH && f.nameCol === nameCol ? f : (fitRef.current = { colW, rowH, nameCol })));
+      const rowH = Math.max(tiny ? 16 : 18, base - shrink.current.n);
+      setFit((f) => (f && f.colW === colW && f.rowH === rowH && f.nameCol === nameCol && f.tiny === tiny ? f : (fitRef.current = { colW, rowH, nameCol, tiny })));
     };
     measure();
     window.addEventListener('resize', measure);

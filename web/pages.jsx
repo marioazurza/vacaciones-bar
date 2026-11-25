@@ -32,7 +32,7 @@ export function CalendarPage({ data, reload, isAdmin, me }) {
   return (
     <>
       <div class="row">
-        <h1>Calendario {data.year}</h1>
+        <h1 class="cal-h1">Calendario {data.year}</h1>
         <span class="spacer" />
         {view === 'month' && <div class="row"><button class="btn sm" onClick={() => setM((m + 11) % 12)}>‹</button><b style="min-width:90px;text-align:center">{MONTHS[m]}</b><button class="btn sm" onClick={() => setM((m + 1) % 12)}>›</button></div>}
         {view === 'week' && <div class="row"><button class="btn sm" onClick={() => setWk(addDays(wk, -7))}>‹</button><b style="min-width:150px;text-align:center">{formatRange(wk, addDays(wk, 6))}</b><button class="btn sm" onClick={() => setWk(addDays(wk, 7))}>›</button></div>}
