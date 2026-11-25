@@ -287,19 +287,19 @@ table.table { width: 100%; border-collapse: collapse; }
   .app { display: block; }
 }
 
-/* Vista mensual compacta: todo el equipo cabe en pantalla sin bajar */
-.gantt.months { font-size: 12px; }
-.gantt.months .g-head { padding: 2px 0; font-size: 10px; }
-.gantt.months .g-head b { font-size: 12px; }
+/* Vista mensual ajustada a la pantalla (--rowh y --colw se calculan al abrirla) */
+.gantt.months { --rowh: 22px; font-size: clamp(10px, calc(var(--rowh) * 0.5), 14px); }
+.gantt.months .g-head { padding: 1px 0; line-height: 1.15; font-size: 10px; }
+.gantt.months .g-head b { font-size: clamp(11px, calc(var(--colw, 34px) * 0.38), 15px); }
 .gantt.months .g-head .g-month { font-size: 10px; }
-.gantt.months .g-name, .gantt.months .g-cell { min-height: 19px; }
-.gantt.months .g-name { font-size: 12px; padding: 0 8px; gap: 6px; }
+.gantt.months .g-name, .gantt.months .g-cell { min-height: var(--rowh); }
+.gantt.months .g-name { padding: 0 8px; gap: 6px; font-size: clamp(11px, calc(var(--rowh) * 0.52), 14px); }
 .gantt.months .g-name .dot { width: 8px; height: 8px; }
-.gantt.months .g-bar { min-height: 14px; margin: 2px 1px; font-size: 10.5px; border-radius: 5px; padding: 0 6px; }
-.gantt.months .g-group { padding: 1px 10px; font-size: 10px; }
-.gantt.months .g-cov { padding: 1px 0; font-size: 10px; }
-.gantt.months .shift-band { padding: 2px 10px; font-size: 11px; border-top-width: 2px; }
-.gantt.months .g-name { font-size: 11.5px; }
+.gantt.months .g-bar { min-height: calc(var(--rowh) - 6px); margin: 3px 1px; font-size: clamp(10px, calc(var(--rowh) * 0.46), 13px); border-radius: 6px; padding: 0 6px; }
+.gantt.months .g-group, .gantt.months .shift-band { min-height: var(--rowh); padding-top: 0; padding-bottom: 0; font-size: clamp(10px, calc(var(--rowh) * 0.45), 12px); }
+.gantt.months .shift-band { border-top-width: 2px; }
+.gantt.months .g-cov { min-height: var(--rowh); padding: 0; display: flex; align-items: center; justify-content: center; font-size: clamp(10px, calc(var(--rowh) * 0.45), 12px); }
+.stick-bar { left: calc(var(--namew, 170px) + 8px) !important; }
 .cal-tools { gap: 10px 18px; }
 .cal-tools select.input { padding: 5px 8px; font-size: 13px; }
 .cal-tools .legend { font-size: 12px; gap: 10px; }
@@ -307,5 +307,4 @@ table.table { width: 100%; border-collapse: collapse; }
 .topbar { padding-top: 6px; padding-bottom: 6px; }
 .topbar select.input, .topbar .btn { padding-top: 5px; padding-bottom: 5px; }
 .content { padding-top: 10px; padding-bottom: 8px; gap: 10px; }
-.gantt.months .g-name, .gantt.months .g-cell { min-height: 18px; }
-.gantt.months .g-bar { min-height: 13px; margin: 2px 1px; }
+.gantt.months .g-cov { letter-spacing: -0.3px; }

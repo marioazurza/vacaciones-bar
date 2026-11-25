@@ -96,14 +96,15 @@ export function YearView({ cal, filters, onDay, onMonth }) {
 // ---------- Línea de tiempo (filas por trabajador, barras continuas) ----------
 // La usan la vista mensual y la semanal: cada periodo de vacaciones es una sola barra
 // que ocupa todos sus días.
-function TimelineView({ cal, filters, from, n, title, wide, onDay, onBar, onPick, previewIds, fixedLength = 0, wrapRef, onScroll, months }) {
+function TimelineView({ cal, filters, from, n, title, wide, onDay, onBar, onPick, previewIds, fixedLength = 0, wrapRef, onScroll, months, fit }) {
   const [sel, setSel] = useState(null);
   const last = addDays(from, n - 1);
   const yStart = `${cal.year}-01-01`, yEnd = `${cal.year}-12-31`;
   const inYear = (d) => d >= yStart && d <= yEnd;
   const days = Array.from({ length: n }, (_, k) => addDays(from, k));
   const staff = applyFilters(cal.staff, filters);
-  const cols = months ? `170px repeat(${n}, 34px)` : wide ? `minmax(110px, 190px) repeat(${n}, minmax(72px, 1fr))` : `minmax(150px, 190px) repeat(${n}, minmax(32px, 1fr))`;
+  const nameCol = fit?.nameCol || 170;
+  const cols = months ? `${nameCol}px repeat(${n}, var(--colw, 34px))` : wide ? `minmax(110px, 190px) repeat(${n}, minmax(72px, 1fr))` : `minmax(150px, 190px) repeat(${n}, minmax(32px, 1fr))`;
   const col = (date) => 2 + diffDays(from, date);
   // Si hay máximo por turno y ningún mínimo, la fila resumen muestra cuántos faltan.
   const byMax = Object.values(cal.analysis.groups).some((G) => Number.isFinite(G.allowedOff[0])) && Object.values(cal.minimums).every((t) => Object.values(t).every((row) => row.every((x) => x === 0)));
@@ -184,7 +185,7 @@ function TimelineView({ cal, filters, from, n, title, wide, onDay, onBar, onPick
   return (
     <div class="stack">
       {onPick && (!months || sel) && <div class="small muted">{fixedLength ? `Para añadir vacaciones, haz clic en el primer día en la fila del trabajador (se cogen ${fixedLength} días seguidos). Haz clic en una barra para editarla.` : sel ? `Primer día: ${formatDate(sel.date)}. Ahora haz clic en el último día del periodo en la misma fila.` : 'Para añadir vacaciones, haz clic en el primer y el último día en la fila del trabajador. Haz clic en una barra para editarla.'}</div>}
-      <div class="gantt-wrap" ref={wrapRef} onScroll={onScroll}><div class={`gantt ${wide ? 'wide' : ''} ${months ? 'months' : ''}`} style={{ gridTemplateColumns: cols }}>{items}</div></div>
+      <div class="gantt-wrap" ref={wrapRef} onScroll={onScroll}><div class={`gantt ${wide ? 'wide' : ''} ${months ? 'months' : ''}`} data-rows={row} style={{ gridTemplateColumns: cols, ...(fit ? { '--colw': `${fit.colW}px`, '--rowh': `${fit.rowH}px`, '--namew': `${nameCol}px` } : {}) }}>{items}</div></div>
     </div>
   );
 }
@@ -201,13 +202,47 @@ export function MonthView({ cal, month, onMonth, ...rest }) {
   // Posición de una cabecera de día dentro de la zona que se desliza (sin contar la columna de nombres).
   const posOf = (h) => wrap.current.scrollLeft + h.getBoundingClientRect().left - wrap.current.getBoundingClientRect().left - nameW();
   const nameW = () => wrap.current?.querySelector('.g-name')?.offsetWidth || 0;
+  // Tamaño ajustado a la pantalla: el mes entero a lo ancho y todas las filas sin bajar,
+  // lo más grande posible.
+  const [fit, setFit] = useState(null);
+  const fitRef = useRef(null);
+  const shrink = useRef({ sig: '', n: 0 });
+  const placed = useRef('');
+  useEffect(() => {
+    const measure = () => {
+      const el = wrap.current;
+      const g = el?.firstChild;
+      if (!g) return;
+      const W = window.innerWidth;
+      const nameCol = W < 600 ? 130 : W < 1200 ? 150 : 170;
+      const days = daysInMonth(cal.year, month);
+      const colW = Math.max(W < 600 ? 24 : 18, Math.min(64, Math.floor((el.clientWidth - nameCol - 2) / days)));
+      const rows = Number(g.dataset.rows) || 20;
+      const top = el.getBoundingClientRect().top;
+      const avail = window.innerHeight - top - 12;
+      const headH = g.querySelector('.g-head')?.offsetHeight || 42;
+      const base = Math.max(18, Math.min(40, Math.floor((avail - headH - 4) / Math.max(1, rows - 2))));
+      const sig = `${window.innerWidth}x${window.innerHeight}|${rows}|${month}`;
+      if (shrink.current.sig !== sig) shrink.current = { sig, n: 0 };
+      // Si aun así sobresale (filas con contenido más alto), se reduce un poco más (nunca vuelve a crecer).
+      const over = el.getBoundingClientRect().bottom - (window.innerHeight - 8);
+      if (fitRef.current && over > 0 && fitRef.current.rowH > 18 && shrink.current.n < 10) shrink.current.n++;
+      const rowH = Math.max(18, base - shrink.current.n);
+      setFit((f) => (f && f.colW === colW && f.rowH === rowH && f.nameCol === nameCol ? f : (fitRef.current = { colW, rowH, nameCol })));
+    };
+    measure();
+    window.addEventListener('resize', measure);
+    return () => window.removeEventListener('resize', measure);
+  });
   useEffect(() => {
     const el = wrap.current;
-    if (!el || shown.current === month) return;
+    const key = `${month}|${fit?.colW}`;
+    if (!el || placed.current === key) return;
     const h = el.querySelector(`[data-date="${monthStart(month)}"]`);
     if (h) el.scrollLeft = posOf(h);
     shown.current = month;
-  }, [month, cal.year]);
+    placed.current = key;
+  }, [month, cal.year, fit?.colW]);
   const onScroll = () => {
     const el = wrap.current;
     if (!el) return;
@@ -219,7 +254,7 @@ export function MonthView({ cal, month, onMonth, ...rest }) {
     }
     if (m !== shown.current) { shown.current = m; onMonth?.(m); }
   };
-  return <TimelineView cal={cal} from={from} n={n} months title={`${cal.year} →`} wrapRef={wrap} onScroll={onScroll} {...rest} />;
+  return <TimelineView cal={cal} from={from} n={n} months fit={fit} title={`${cal.year} →`} wrapRef={wrap} onScroll={onScroll} {...rest} />;
 }
 
 // ---------- Vista semanal ----------
