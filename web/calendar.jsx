@@ -97,7 +97,7 @@ export function YearView({ cal, filters, onDay, onMonth }) {
 // ---------- Línea de tiempo (filas por trabajador, barras continuas) ----------
 // La usan la vista mensual y la semanal: cada periodo de vacaciones es una sola barra
 // que ocupa todos sus días.
-function TimelineView({ cal, filters, from, n, title, wide, onDay, onBar, onPick, previewIds, fixedLength = 0, wrapRef, onScroll, months, fit, onTouchStart, onTouchEnd }) {
+function TimelineView({ cal, filters, from, n, title, wide, onDay, onBar, onPick, previewIds, fixedLength = 0, wrapRef, onScroll, months, fit }) {
   const [sel, setSel] = useState(null);
   const last = addDays(from, n - 1);
   const yStart = `${cal.year}-01-01`, yEnd = `${cal.year}-12-31`;
@@ -187,7 +187,7 @@ function TimelineView({ cal, filters, from, n, title, wide, onDay, onBar, onPick
   return (
     <div class="stack">
       {onPick && (!months || sel) && <div class="small muted">{fixedLength ? `Para añadir vacaciones, haz clic en el primer día en la fila del trabajador (se cogen ${fixedLength} días seguidos). Haz clic en una barra para editarla.` : sel ? `Primer día: ${formatDate(sel.date)}. Ahora haz clic en el último día del periodo en la misma fila.` : 'Para añadir vacaciones, haz clic en el primer y el último día en la fila del trabajador. Haz clic en una barra para editarla.'}</div>}
-      <div class={`gantt-wrap ${fit?.tiny ? 'no-x' : ''}`} ref={wrapRef} onScroll={onScroll} onTouchStart={onTouchStart} onTouchEnd={onTouchEnd}><div class={`gantt ${wide ? 'wide' : ''} ${months ? 'months' : ''} ${tiny ? 'tiny' : ''}`} data-rows={row} style={{ gridTemplateColumns: cols, ...(fit ? { '--colw': `${fit.colW}px`, '--rowh': `${fit.rowH}px`, '--namew': `${nameCol}px` } : {}) }}>{items}</div></div>
+      <div class={`gantt-wrap ${fit?.tiny ? 'snap' : ''}`} ref={wrapRef} onScroll={onScroll} style={fit?.tiny ? { scrollPaddingLeft: `${nameCol}px` } : undefined}><div class={`gantt ${wide ? 'wide' : ''} ${months ? 'months' : ''} ${tiny ? 'tiny' : ''}`} data-rows={row} style={{ gridTemplateColumns: cols, ...(fit ? { '--colw': `${fit.colW}px`, '--rowh': `${fit.rowH}px`, '--namew': `${nameCol}px` } : {}) }}>{items}</div></div>
     </div>
   );
 }
@@ -243,7 +243,11 @@ export function MonthView({ cal, month, onMonth, ...rest }) {
     const key = `${month}|${fit?.colW}`;
     if (!el || placed.current === key) return;
     const h = el.querySelector(`[data-date="${monthStart(month)}"]`);
-    if (h) el.scrollLeft = posOf(h);
+    if (h) {
+      // En el móvil, si ya se veía el calendario, el cambio de mes se anima.
+      if (fit?.tiny && placed.current.endsWith(`|${fit?.colW}`)) el.scrollTo({ left: posOf(h), behavior: 'smooth' });
+      else el.scrollLeft = posOf(h);
+    }
     shown.current = month;
     placed.current = key;
   }, [month, cal.year, fit?.colW]);
@@ -262,16 +266,7 @@ export function MonthView({ cal, month, onMonth, ...rest }) {
       onMonth?.(m);
     }
   };
-  // En el móvil el mes entero cabe en la pantalla: se cambia de mes deslizando con el dedo.
-  const touch = useRef(null);
-  const onTouchStart = (e) => { if (fit?.tiny) touch.current = { x: e.touches[0].clientX, y: e.touches[0].clientY }; };
-  const onTouchEnd = (e) => {
-    const t = touch.current; touch.current = null;
-    if (!t || !fit?.tiny) return;
-    const dx = e.changedTouches[0].clientX - t.x, dy = e.changedTouches[0].clientY - t.y;
-    if (Math.abs(dx) > 50 && Math.abs(dx) > Math.abs(dy) * 1.5) onMonth?.(Math.max(0, Math.min(11, month + (dx < 0 ? 1 : -1))));
-  };
-  return <TimelineView cal={cal} from={from} n={n} months fit={fit} onTouchStart={onTouchStart} onTouchEnd={onTouchEnd} title={`${cal.year} →`} wrapRef={wrap} onScroll={onScroll} {...rest} />;
+  return <TimelineView cal={cal} from={from} n={n} months fit={fit} title={`${cal.year} →`} wrapRef={wrap} onScroll={onScroll} {...rest} />;
 }
 
 // ---------- Vista semanal ----------
