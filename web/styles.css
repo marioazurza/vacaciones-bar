@@ -338,3 +338,4 @@ table.table { width: 100%; border-collapse: collapse; }
 }
 .gantt.months.tiny .g-head.num, .gantt.months.tiny .g-head.mstart { z-index: 3; }
 .legend > span { white-space: nowrap; }
+.gantt-wrap.no-x { overflow-x: hidden; touch-action: pan-y; }

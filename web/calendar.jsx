@@ -97,7 +97,7 @@ export function YearView({ cal, filters, onDay, onMonth }) {
 // ---------- Línea de tiempo (filas por trabajador, barras continuas) ----------
 // La usan la vista mensual y la semanal: cada periodo de vacaciones es una sola barra
 // que ocupa todos sus días.
-function TimelineView({ cal, filters, from, n, title, wide, onDay, onBar, onPick, previewIds, fixedLength = 0, wrapRef, onScroll, months, fit }) {
+function TimelineView({ cal, filters, from, n, title, wide, onDay, onBar, onPick, previewIds, fixedLength = 0, wrapRef, onScroll, months, fit, onTouchStart, onTouchEnd }) {
   const [sel, setSel] = useState(null);
   const last = addDays(from, n - 1);
   const yStart = `${cal.year}-01-01`, yEnd = `${cal.year}-12-31`;
@@ -187,7 +187,7 @@ function TimelineView({ cal, filters, from, n, title, wide, onDay, onBar, onPick
   return (
     <div class="stack">
       {onPick && (!months || sel) && <div class="small muted">{fixedLength ? `Para añadir vacaciones, haz clic en el primer día en la fila del trabajador (se cogen ${fixedLength} días seguidos). Haz clic en una barra para editarla.` : sel ? `Primer día: ${formatDate(sel.date)}. Ahora haz clic en el último día del periodo en la misma fila.` : 'Para añadir vacaciones, haz clic en el primer y el último día en la fila del trabajador. Haz clic en una barra para editarla.'}</div>}
-      <div class="gantt-wrap" ref={wrapRef} onScroll={onScroll}><div class={`gantt ${wide ? 'wide' : ''} ${months ? 'months' : ''} ${tiny ? 'tiny' : ''}`} data-rows={row} style={{ gridTemplateColumns: cols, ...(fit ? { '--colw': `${fit.colW}px`, '--rowh': `${fit.rowH}px`, '--namew': `${nameCol}px` } : {}) }}>{items}</div></div>
+      <div class={`gantt-wrap ${fit?.tiny ? 'no-x' : ''}`} ref={wrapRef} onScroll={onScroll} onTouchStart={onTouchStart} onTouchEnd={onTouchEnd}><div class={`gantt ${wide ? 'wide' : ''} ${months ? 'months' : ''} ${tiny ? 'tiny' : ''}`} data-rows={row} style={{ gridTemplateColumns: cols, ...(fit ? { '--colw': `${fit.colW}px`, '--rowh': `${fit.rowH}px`, '--namew': `${nameCol}px` } : {}) }}>{items}</div></div>
     </div>
   );
 }
@@ -218,7 +218,7 @@ export function MonthView({ cal, month, onMonth, ...rest }) {
       const W = window.innerWidth;
       const tiny = W < 600; // móvil: el mes entero a lo ancho, con nombres cortos
       const nameCol = tiny ? 62 : W < 1200 ? 150 : 170;
-      const days = daysInMonth(cal.year, month);
+      const days = 31; // ancho fijo (el mes más largo) para que no salte al cambiar de mes
       const colW = Math.max(tiny ? 8 : 18, Math.min(64, Math.floor((el.clientWidth - nameCol - 2) / days)));
       const rows = Number(g.dataset.rows) || 20;
       const top = el.getBoundingClientRect().top;
@@ -256,9 +256,22 @@ export function MonthView({ cal, month, onMonth, ...rest }) {
       const h = el.querySelector(`[data-date="${monthStart(k)}"]`);
       if (h && posOf(h) <= x) m = k;
     }
-    if (m !== shown.current) { shown.current = m; onMonth?.(m); }
+    if (m !== shown.current) {
+      shown.current = m;
+      placed.current = `${m}|${fit?.colW}`; // ya está en su sitio: no recolocar mientras se desliza
+      onMonth?.(m);
+    }
   };
-  return <TimelineView cal={cal} from={from} n={n} months fit={fit} title={`${cal.year} →`} wrapRef={wrap} onScroll={onScroll} {...rest} />;
+  // En el móvil el mes entero cabe en la pantalla: se cambia de mes deslizando con el dedo.
+  const touch = useRef(null);
+  const onTouchStart = (e) => { if (fit?.tiny) touch.current = { x: e.touches[0].clientX, y: e.touches[0].clientY }; };
+  const onTouchEnd = (e) => {
+    const t = touch.current; touch.current = null;
+    if (!t || !fit?.tiny) return;
+    const dx = e.changedTouches[0].clientX - t.x, dy = e.changedTouches[0].clientY - t.y;
+    if (Math.abs(dx) > 50 && Math.abs(dx) > Math.abs(dy) * 1.5) onMonth?.(Math.max(0, Math.min(11, month + (dx < 0 ? 1 : -1))));
+  };
+  return <TimelineView cal={cal} from={from} n={n} months fit={fit} onTouchStart={onTouchStart} onTouchEnd={onTouchEnd} title={`${cal.year} →`} wrapRef={wrap} onScroll={onScroll} {...rest} />;
 }
 
 // ---------- Vista semanal ----------
