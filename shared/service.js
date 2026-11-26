@@ -439,7 +439,7 @@ export function createService({ repo, hashPassword, verifyPassword, randomToken,
         const nb = notBefore && notBefore > `${year}-12-31` ? `${year + 1}-01-01` : notBefore;
         // Las vacaciones pedidas por un trabajador (nota "Pedido…") se respetan tal cual.
         const fixed = ctx.vacations.filter((v) => String(v.note || '').startsWith('Pedido'));
-        const prop = generateRotation({ ...ctx, vacations: [] }, { ...gs.rotation, periodLength: periodRules().periodLength || 15, notBefore: nb ? addDays(nb, 1) : null, fixed });
+        const prop = generateRotation({ ...ctx, vacations: [] }, { ...gs.rotation, aroundBlocked: gs.rotation?.aroundBlocked !== false && !gs.rotation?.spread, periodLength: periodRules().periodLength || 15, notBefore: nb ? addDays(nb, 1) : null, fixed });
         return { ...prop, vacations: [...fixed.map((v) => ({ worker_id: v.worker_id, start: v.start, end: v.end, note: v.note })), ...prop.vacations], replaceOnly: true };
       }
       const prop = generateProposal(ctx, {
