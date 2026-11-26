@@ -69,7 +69,33 @@ const splitSentences = (text) => String(text || '').split(/[\n.;]+|\s+y\s+(?=[A-
  * ctx: contexto de analyze() (año, plantilla con nombres, vacaciones...). L: días de cada periodo.
  * Devuelve { understood, notUnderstood, extra, moves, issues, ok }.
  */
-export function proposeFromText(ctx, text, { L = 15, nameOf = (id) => `#${id}` } = {}) {
+export function proposeFromText(ctx, text, opts = {}) {
+  const res = proposeCore(ctx, text, opts);
+  if (res.ok || !res.understood.length || opts.noAlternative) return res;
+  // No encaja tal cual: se busca la fecha más cercana que sí encaje (moviendo una de las peticiones).
+  const { L = 15 } = opts;
+  const N = daysInYear(ctx.year);
+  const t0 = Date.now();
+  for (let d = 1; d <= 75 && Date.now() - t0 < 800; d++) {
+    for (const sign of [1, -1]) {
+      for (let k = 0; k < res.understood.length; k++) {
+        const u = res.understood[k];
+        const i = dayIndex(u.to.start, ctx.year) + sign * d;
+        const len = periodLength(u.to.start, u.to.end);
+        if (i < 0 || i + len > N) continue;
+        const start = dateFromIndex(ctx.year, i), end = dateFromIndex(ctx.year, i + len - 1);
+        // Descarte rápido: fechas bloqueadas o encima de otra quincena suya.
+        const quick = analyze({ ...ctx, vacations: ctx.vacations.map((v) => (v.id === u.id ? { ...v, start, end } : v)) }).issues;
+        if (quick.some((it) => (it.type === 'blocked' || it.type === 'overlap') && it.worker_id === u.worker_id)) continue;
+        const alt = proposeCore(ctx, text, { ...opts, noRegen: true, override: { [u.sentence]: { start, end } } });
+        if (alt.ok) return { ...res, alternative: alt };
+      }
+    }
+  }
+  return res;
+}
+
+function proposeCore(ctx, text, { L = 15, nameOf = (id) => `#${id}`, override = {}, noRegen = false } = {}) {
   const year = ctx.year;
   const N = daysInYear(year);
   const base = analyze(ctx);
@@ -78,16 +104,21 @@ export function proposeFromText(ctx, text, { L = 15, nameOf = (id) => `#${id}` }
   const moved = new Map(); // id de vacación -> { from, to }
   const fixedIds = new Set();
 
-  for (const sentence of splitSentences(text)) {
+  const sentences = splitSentences(text);
+  for (let si = 0; si < sentences.length; si++) {
+    const sentence = sentences[si];
     const w = findWorker(sentence, ctx.staff);
-    const dates = parseDates(sentence, year, L);
+    const dates = override[si] || parseDates(sentence, year, L);
     if (!w || w.ambiguous || !dates || !dates.start) {
       notUnderstood.push({ text: sentence, why: !w ? 'No encuentro a qué persona se refiere.' : w.ambiguous ? `Hay varias personas con ese nombre (${w.ambiguous.map((s) => s.name).join(', ')}).` : 'No encuentro las fechas.' });
       continue;
     }
     const start = dates.start;
     const end = dates.end || addDays(start, L - 1);
-    if (end < start) { notUnderstood.push({ text: sentence, why: 'La fecha de fin es anterior a la de inicio.' }); continue; }
+    if (end < start) {
+      notUnderstood.push({ text: sentence, why: dates.end && Number(end.slice(5, 7)) < Number(start.slice(5, 7)) ? `No puede pasar de un año a otro: pon hasta el 31 de diciembre (las de enero van en el calendario del año siguiente).` : 'La fecha de fin es anterior a la de inicio.' });
+      continue;
+    }
     const len = periodLength(start, end);
     const mine = vacations.filter((v) => v.worker_id === w.worker_id && !fixedIds.has(v.id));
     if (!mine.length) { notUnderstood.push({ text: sentence, why: `${w.name} no tiene vacaciones que se puedan mover.` }); continue; }
@@ -100,7 +131,7 @@ export function proposeFromText(ctx, text, { L = 15, nameOf = (id) => `#${id}` }
     moved.set(target.id, { worker_id: w.worker_id, from: { start: target.start, end: target.end }, to: { start, end } });
     fixedIds.add(target.id);
     vacations = vacations.map((v) => (v.id === target.id ? { ...v, start, end } : v));
-    understood.push({ text: sentence, worker_id: w.worker_id, id: target.id, from: { start: target.start, end: target.end }, to: { start, end } });
+    understood.push({ text: sentence, sentence: si, worker_id: w.worker_id, id: target.id, from: { start: target.start, end: target.end }, to: { start, end } });
   }
 
   // Cambios extra para que encaje: a quien choque, se le busca el hueco libre más cercano
@@ -172,7 +203,7 @@ export function proposeFromText(ctx, text, { L = 15, nameOf = (id) => `#${id}` }
   let remaining = bad(vacations);
   // Si con cambios sueltos no encaja, se rehace la rotación solo en el lado del verano afectado,
   // dejando fijas las fechas pedidas, lo pedido por los trabajadores y el resto del año.
-  if (remaining.length && understood.length) {
+  if (remaining.length && understood.length && !noRegen) {
     const segOf = (d) => { let a = dayIndex(d, year); while (a > 0 && !base.blockedDay[a - 1]) a--; return a; };
     const segs = new Set(understood.flatMap((u) => [segOf(u.from.start), segOf(u.to.start)]));
     const requested = new Map(understood.map((u) => [u.id, u.to]));

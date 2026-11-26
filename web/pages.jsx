@@ -51,7 +51,7 @@ export function CalendarPage({ data, reload, isAdmin, me }) {
       <div class="row">
         <h1 class="cal-h1">Calendario {data.year}</h1>
         <span class="spacer" />
-        {view === 'month' && <div class="row"><button class="btn sm" onClick={() => setM((m + 11) % 12)}>‹</button><b style="min-width:90px;text-align:center">{MONTHS[m]}</b><button class="btn sm" onClick={() => setM((m + 1) % 12)}>›</button></div>}
+        {view === 'month' && <div class="row"><button class="btn sm" onClick={() => setM((m + 11) % 12)}>‹</button><b style="min-width:110px;text-align:center;font-size:18px">{MONTHS[m]}</b><button class="btn sm" onClick={() => setM((m + 1) % 12)}>›</button></div>}
         {view === 'week' && <div class="row"><button class="btn sm" onClick={() => setWk(addDays(wk, -7))}>‹</button><b style="min-width:150px;text-align:center">{formatRange(wk, addDays(wk, 6))}</b><button class="btn sm" onClick={() => setWk(addDays(wk, 7))}>›</button></div>}
         <div class="seg">
           {[['year', 'Año'], ['month', 'Mes'], ['week', 'Semana']].map(([k, t]) => <button key={k} class={view === k ? 'on' : ''} onClick={() => setView(k)}>{t}</button>)}
@@ -329,8 +329,8 @@ export function GeneratorPage({ data, reload }) {
     setBusy(false);
     if (r) setRes(r);
   };
-  const apply = async () => {
-    const r = await run(() => api('applyMoves', { year: data.year, moves: res.moves }), 'Cambios aplicados');
+  const apply = async (moves) => {
+    const r = await run(() => api('applyMoves', { year: data.year, moves }), 'Cambios aplicados');
     if (r) { setRes(null); setText(''); reload(); }
   };
   return (
@@ -350,10 +350,14 @@ export function GeneratorPage({ data, reload }) {
             {res.extra.length > 0
               ? <div><b>Para que se cumplan las reglas, también habría que cambiar</b><ul>{res.extra.map((x) => <li key={x.id}>{x.label}</li>)}</ul></div>
               : <div>✅ Encaja tal cual, sin cambiar a nadie más.</div>}
-            <div class="row"><button class="btn ok" onClick={apply}>Aplicar {res.moves.length} cambio{res.moves.length === 1 ? '' : 's'}</button><button class="btn" onClick={() => setRes(null)}>Descartar</button></div>
-          </> : res.understood.length > 0 && (
+            <div class="row"><button class="btn ok" onClick={() => apply(res.moves)}>Aplicar {res.moves.length} cambio{res.moves.length === 1 ? '' : 's'}</button><button class="btn" onClick={() => setRes(null)}>Descartar</button></div>
+          </> : res.understood.length > 0 && (res.alternative ? <>
+            <Alert kind="warn" title="En esas fechas exactas no encaja" items={res.issues} />
+            <div><b>Lo más cerca que sí encaja</b><ul>{res.alternative.understood.map((u) => <li key={u.id}>{u.label}</li>)}{res.alternative.extra.map((x) => <li key={x.id}>{x.label}</li>)}</ul></div>
+            <div class="row"><button class="btn ok" onClick={() => apply(res.alternative.moves)}>Aplicar {res.alternative.moves.length} cambio{res.alternative.moves.length === 1 ? '' : 's'}</button><button class="btn" onClick={() => setRes(null)}>Descartar</button></div>
+          </> : (
             <Alert kind="bad" title="No encuentro una forma de encajarlo sin romper las reglas" items={res.issues} />
-          )}
+          ))}
         </div>
       )}
     </>

@@ -13,9 +13,21 @@ export function toISO(d) {
   return `${d.getUTCFullYear()}-${pad(d.getUTCMonth() + 1)}-${pad(d.getUTCDate())}`;
 }
 
+// Caché de milisegundos por fecha: el generador y las propuestas analizan el año miles de veces.
+const msCache = new Map();
+function ms(s) {
+  let v = msCache.get(s);
+  if (v === undefined) {
+    const [y, m, d] = s.split('-').map(Number);
+    v = Date.UTC(y, m - 1, d);
+    if (msCache.size > 20000) msCache.clear();
+    msCache.set(s, v);
+  }
+  return v;
+}
+
 export function parse(s) {
-  const [y, m, d] = s.split('-').map(Number);
-  return new Date(Date.UTC(y, m - 1, d));
+  return new Date(ms(s));
 }
 
 export function isISODate(s) {
@@ -24,17 +36,17 @@ export function isISODate(s) {
 }
 
 export function addDays(s, n) {
-  return toISO(new Date(parse(s).getTime() + n * DAY));
+  return toISO(new Date(ms(s) + n * DAY));
 }
 
 /** Días entre a y b (b - a). */
 export function diffDays(a, b) {
-  return Math.round((parse(b) - parse(a)) / DAY);
+  return Math.round((ms(b) - ms(a)) / DAY);
 }
 
 /** Día de la semana con lunes = 0 ... domingo = 6. */
 export function dow(s) {
-  return (parse(s).getUTCDay() + 6) % 7;
+  return (Math.floor(ms(s) / DAY) + 3) % 7;
 }
 
 export function isLeap(y) {
@@ -62,8 +74,11 @@ export function dayIndex(s, year = Number(s.slice(0, 4))) {
   return diffDays(yearStart(year), s);
 }
 
+const yearDates = new Map();
 export function dateFromIndex(year, i) {
-  return addDays(yearStart(year), i);
+  let list = yearDates.get(year);
+  if (!list) { list = []; yearDates.set(year, list); }
+  return list[i] || (list[i] = addDays(yearStart(year), i));
 }
 
 /** Lista de fechas de start a end, ambos incluidos. */

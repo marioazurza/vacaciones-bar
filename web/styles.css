@@ -206,7 +206,7 @@ table.table { width: 100%; border-collapse: collapse; }
 .g-head b { display: block; font-size: 13px; color: var(--text); }
 .g-head.we { background: var(--weekend); }
 .g-head.today b { color: #fff; background: var(--primary); border-radius: 99px; width: 22px; height: 22px; line-height: 22px; margin: 0 auto; }
-.g-head .g-month { display: block; font-style: normal; font-weight: 700; font-size: 11px; color: var(--primary); text-align: left; padding-left: 4px; white-space: nowrap; overflow: visible; }
+.g-head .g-month { display: block; font-style: normal; font-weight: 700; font-size: 15px; line-height: 1.3; color: var(--primary); text-align: left; padding-left: 4px; white-space: nowrap; overflow: visible; }
 .g-head.mstart, .g-cell.mstart { border-left: 2px solid var(--primary); }
 .g-head.mstart { z-index: 3; }
 .gantt.months .g-bar { overflow: clip; }
