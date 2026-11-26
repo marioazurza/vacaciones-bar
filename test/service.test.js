@@ -293,3 +293,21 @@ test('el administrador puede entrar solo con su contraseña', () => {
   assert.equal(service.call(null, 'login', { password: 'admin' }).user.role, 'admin');
   assert.match(err(() => service.call(null, 'login', { password: 'mal' })).message, /Contraseña incorrecta/);
 });
+
+test('generador por texto: entiende frases y propone cambios que cumplen las reglas', () => {
+  const repo = openRepo(':memory:');
+  let n = 0;
+  const service = createService({ repo, hashPassword: (p) => `x:${p}`, verifyPassword: (p, h) => h === `x:${p}`, randomToken: () => `t${++n}`, today: () => '2026-11-24' });
+  service.seed({ workers: BAR_WORKERS });
+  const admin = service.call(null, 'login', { password: 'admin' }).token;
+  const r = service.call(admin, 'proposeText', { year: 2027, text: 'Gemma del 10 al 24 de octubre\nPepito en mayo' });
+  assert.equal(r.understood.length, 1);
+  assert.equal(r.notUnderstood.length, 1);
+  assert.ok(r.ok);
+  service.call(admin, 'applyMoves', { year: 2027, moves: r.moves });
+  const d = service.call(admin, 'getYear', { year: 2027 });
+  const gemma = d.staff.find((s) => s.first_name === 'Gemma');
+  assert.ok(d.vacations.some((v) => v.worker_id === gemma.worker_id && v.start === '2027-10-10'));
+  // En verano no se puede.
+  assert.equal(service.call(admin, 'proposeText', { year: 2027, text: 'Amaia del 1 al 15 de julio' }).ok, false);
+});

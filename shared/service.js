@@ -10,6 +10,7 @@ import {
   checkPeriodShape, normalizeMinimums, groupLabel,
 } from './rules.js';
 import { generateProposal, generateRotation, DEFAULT_GENERATOR_SETTINGS } from './generator.js';
+import { proposeFromText } from './proposer.js';
 import { formatRange, overlaps, periodLength, todayISO, isISODate, addDays } from './dates.js';
 
 export const DEFAULT_PERIOD_RULES = { periodLength: 15, maxOffPerShift: DEFAULT_MAX_OFF_PER_SHIFT, wholeTeam: ['sala', 'cocina'], maxOffPerShiftAll: 1 };
@@ -203,6 +204,7 @@ export function createService({ repo, hashPassword, verifyPassword, randomToken,
     'createYear', 'publishYear', 'unpublishYear', 'saveWorker', 'removeWorker', 'saveVacation', 'deleteVacation',
     'generate', 'applyProposal', 'saveMinimums', 'saveGeneratorSettings', 'saveBlocked', 'deleteBlocked',
     'saveReinforcement', 'deleteReinforcement', 'savePeriodRules', 'resolveRequest', 'listHistory', 'clearVacations',
+    'proposeText', 'applyMoves',
   ]);
 
   function call(token, action, params = {}) {
@@ -660,6 +662,37 @@ export function createService({ repo, hashPassword, verifyPassword, randomToken,
       if (u) notify([u.id], `${user.display} te propone intercambiar vacaciones: sus días ${formatRange(mine.start, mine.end)} por tus días ${formatRange(other.start, other.end)}.`, `request:${req.id}`);
       log(user, year, 'Propuesta de intercambio', `${user.display} ↔ ${nameOfFn()(other.worker_id)}.`);
       return { ok: true, id: req.id };
+    },
+
+    // ----- propuestas escritas (administrador) -----
+    proposeText({ year, text }) {
+      year = Number(year);
+      requireYear(year);
+      if (!String(text || '').trim()) throw new ApiError(400, 'Escribe qué quieres cambiar.');
+      return proposeFromText(ctxFor(year), String(text).slice(0, 2000), { L: periodRules().periodLength || 15, nameOf: nameOfFn() });
+    },
+
+    applyMoves({ year, moves = [] }, user) {
+      year = Number(year);
+      requireYear(year);
+      const all = repo.all('vacations', { year });
+      const list = moves.map((m) => {
+        const v = all.find((x) => x.id === Number(m.id));
+        if (!v) throw new ApiError(409, 'Alguna de esas vacaciones ha cambiado. Vuelve a pedir la propuesta.');
+        checkPeriod(m.start, m.end, year);
+        return { v, start: m.start, end: m.end };
+      });
+      const next = all.map((v) => { const m = list.find((x) => x.v.id === v.id); return m ? { ...v, start: m.start, end: m.end } : v; });
+      guard(year, { vacations: next }, 'No se pueden aplicar los cambios porque');
+      const nameOf = nameOfFn();
+      const pub = yearRow(year).status === 'publicado';
+      for (const { v, start, end } of list) {
+        repo.update('vacations', v.id, { start, end });
+        log(user, year, 'Vacaciones modificadas', `${nameOf(v.worker_id)}: ${formatRange(v.start, v.end)} → ${formatRange(start, end)}.`);
+        const u = pub ? userOfWorker(v.worker_id) : null;
+        if (u) notify([u.id], `El administrador ha cambiado tus vacaciones: ${formatRange(start, end)}.`, `year:${year}`);
+      }
+      return { ok: true, count: list.length };
     },
 
     /**

@@ -319,148 +319,47 @@ function WorkerModal({ data, initial, onClose, onDone }) {
 
 // =============== GENERADOR (admin) ===============
 export function GeneratorPage({ data, reload }) {
-  const [s, setS] = useState(data.generator);
-  const [keep, setKeep] = useState(true);
+  // Solo un cuadro: el administrador escribe lo que quiere y la app le dice qué cambiaría.
+  const [text, setText] = useState('');
+  const [res, setRes] = useState(null);
   const [busy, setBusy] = useState(false);
-  const [prop, setProp] = useState(null);
-  const [pref, setPref] = useState(false);
-  const [view, setView] = useState('year');
-  const [m, setM] = useState(6);
-  useEffect(() => { setS(data.generator); setProp(null); }, [data.year]);
-  const nameOf = nameFn(data);
-
-  const generate = async () => {
+  const check = async () => {
     setBusy(true);
-    await new Promise((r) => setTimeout(r, 30));
-    const saved = await run(() => api('saveGeneratorSettings', { settings: s }));
-    if (saved) setS(saved);
-    const p = await run(() => api('generate', { year: data.year, settings: saved || s, keepExisting: keep }));
+    const r = await run(() => api('proposeText', { year: data.year, text }));
     setBusy(false);
-    if (p) setProp({ ...p, keep: p.replaceOnly ? false : keep });
+    if (r) setRes(r);
   };
   const apply = async () => {
-    const ok = await run(() => api('applyProposal', { year: data.year, vacations: prop.vacations, reinforcements: prop.reinforcements, replace: !prop.keep }), 'Propuesta aplicada. Puedes seguir ajustándola en el calendario.');
-    if (ok) { setProp(null); reload(); }
+    const r = await run(() => api('applyMoves', { year: data.year, moves: res.moves }), 'Cambios aplicados');
+    if (r) { setRes(null); setText(''); reload(); }
   };
-
-  const previewVacs = prop ? [...(prop.keep ? data.vacations : []), ...prop.vacations.map((v, i) => ({ ...v, id: -1000 - i }))] : null;
-  const previewIds = prop ? new Set(prop.vacations.map((_, i) => -1000 - i)) : null;
-  const cal = useMemo(() => (prop ? buildCal(data, { vacations: previewVacs, extraReinforcements: prop.reinforcements }) : null), [prop]);
-  const rot = s.strategy !== 'equilibrado';
-  const orderFor = (key) => {
-    const members = data.staff.filter((st) => `${st.team}-${st.shift}` === key);
-    const wanted = s.rotation?.order?.[key] || [];
-    return [...members].sort((x, y) => { const ix = wanted.indexOf(x.worker_id), iy = wanted.indexOf(y.worker_id); return (ix < 0 ? 999 : ix) - (iy < 0 ? 999 : iy) || x.name.localeCompare(y.name); });
-  };
-  const move = (key, k, dir) => {
-    const ids = orderFor(key).map((x) => x.worker_id);
-    [ids[k], ids[k + dir]] = [ids[k + dir], ids[k]];
-    setS({ ...s, rotation: { ...s.rotation, order: { ...(s.rotation?.order || {}), [key]: ids } } });
-  };
-  const toggleMonth = (mm) => setS({ ...s, preferredMonths: s.preferredMonths.includes(mm) ? s.preferredMonths.filter((x) => x !== mm) : [...s.preferredMonths, mm] });
-  const maxLoad = prop ? Math.max(1, ...prop.monthLoad) : 1;
-
   return (
     <>
-      <div class="row"><h1>Generador de propuestas {data.year}</h1>{data.status === 'publicado' && <span class="badge warn">Calendario ya publicado</span>}</div>
+      <div class="row"><h1>Generador {data.year}</h1></div>
       <div class="card stack">
-        <h2>Cómo quieres repartir las vacaciones</h2>
-        <div class="seg">
-          <button class={rot ? 'on' : ''} onClick={() => setS({ ...s, strategy: 'rotacion' })}>🔁 Rotación por turnos</button>
-          <button class={!rot ? 'on' : ''} onClick={() => setS({ ...s, strategy: 'equilibrado' })}>Reparto automático</button>
-        </div>
-        {rot ? <>
-          <div class="small muted">En cada turno, las vacaciones van una detrás de otra: cuando acaba un trabajador empieza el siguiente. Así nunca hay dos del mismo turno de vacaciones a la vez.</div>
-          <div class="grid2">
-            <Field label="Empieza la rotación el">
-              <input class="input" type="date" value={s.rotation?.start || `${data.year}-01-04`} min={`${data.year}-01-01`} max={`${data.year}-12-31`} onInput={(e) => setS({ ...s, rotation: { ...s.rotation, start: e.currentTarget.value } })} />
-            </Field>
-            <Field label={`Las ${Math.floor(30 / (data.periodRules?.periodLength || 15))} vueltas de cada turno`}>
-              <div class="seg">
-                <button class={!s.rotation?.spread && s.rotation?.aroundBlocked !== false ? 'on' : ''} onClick={() => setS({ ...s, rotation: { ...s.rotation, spread: false, aroundBlocked: true } })}>Una antes y otra después del bloqueo</button>
-                <button class={!s.rotation?.spread && s.rotation?.aroundBlocked === false ? 'on' : ''} onClick={() => setS({ ...s, rotation: { ...s.rotation, spread: false, aroundBlocked: false } })}>Seguidas</button>
-                <button class={s.rotation?.spread ? 'on' : ''} onClick={() => setS({ ...s, rotation: { ...s.rotation, spread: true, aroundBlocked: false } })}>Repartidas en el año</button>
-              </div>
-            </Field>
-          </div>
-          <div>
-            <div class="small muted" style="margin-bottom:8px">Orden de cada turno (usa las flechas para cambiarlo)</div>
-            <div class="grid2" style="grid-template-columns:repeat(auto-fit, minmax(min(100%, 380px), 1fr))">{GROUPS.map((g) => {
-              const list = orderFor(g.key);
-              if (!list.length) return null;
-              return (
-                <div key={g.key} class={`group-box shift-${g.shift}`}>
-                  <b class="row"><ShiftTag shift={g.shift} /> {TEAMS[g.team]}</b>
-                  {list.map((st, k) => (
-                    <div class="row" key={st.worker_id}>
-                      <span class="badge">{k + 1}</span><span style="flex:1">{st.name}</span>
-                      <button class="btn sm ghost" disabled={k === 0} aria-label="Subir" onClick={() => move(g.key, k, -1)}>↑</button>
-                      <button class="btn sm ghost" disabled={k === list.length - 1} aria-label="Bajar" onClick={() => move(g.key, k, 1)}>↓</button>
-                    </div>
-                  ))}
-                </div>
-              );
-            })}</div>
-          </div>
-          <Alert kind="warn" title="Al aplicar la rotación se sustituyen todas las vacaciones de este año en el calendario." />
-        </> : <>
-          <div class="seg">
-            <button class={s.mode === 'repartir' ? 'on' : ''} onClick={() => setS({ ...s, mode: 'repartir' })}>Repartir durante todo el año</button>
-            <button class={s.mode === 'verano' ? 'on' : ''} onClick={() => setS({ ...s, mode: 'verano' })}>Priorizar verano</button>
-          </div>
-          <Field label="Meses preferentes (opcional)">
-            <div class="month-chips">{MONTHS_SHORT.map((t, i) => <button key={i} type="button" class={s.preferredMonths.includes(i) ? 'on' : ''} onClick={() => toggleMonth(i)}>{t}</button>)}</div>
-          </Field>
-          <label class="row"><input type="checkbox" checked={keep} onChange={(e) => setKeep(e.currentTarget.checked)} /> Mantener las vacaciones que ya están en el calendario y repartir solo los días pendientes</label>
-          <div class="small muted">Las fechas bloqueadas y las preferencias de cada trabajador se tienen en cuenta.</div>
-        </>}
-        {data.periodRules?.periodLength > 0 && <div class="small muted">Cada periodo dura {data.periodRules.periodLength} días seguidos{data.periodRules?.maxOffPerShift != null ? ` y en cada turno puede haber como máximo ${data.periodRules.maxOffPerShift} persona de vacaciones a la vez` : ''}. Se cambia en Ajustes.</div>}
-        <div class="row"><button class="btn primary" disabled={busy} onClick={generate}>{busy ? 'Calculando…' : prop ? '↻ Generar otra propuesta' : '✨ Generar propuesta'}</button></div>
+        <div class="small muted">Escribe los cambios que quieres, uno por línea. Por ejemplo:<br />
+          «Gemma del 10 al 24 de octubre» · «Diego la segunda quincena de noviembre» · «Edar desde el 2 de diciembre» · «Tania en octubre»</div>
+        <textarea class="input" rows="5" style="resize:vertical;font:inherit" value={text} placeholder="¿Qué quieres cambiar?" onInput={(e) => { setText(e.currentTarget.value); setRes(null); }} />
+        <div class="row"><button class="btn primary" disabled={busy || !text.trim()} onClick={check}>{busy ? 'Revisando…' : 'Revisar'}</button></div>
       </div>
-
-      {prop && (
+      {res && (
         <div class="card stack">
-          <div class="card-head"><h2>Propuesta</h2><span class="badge info">Vista previa: aún no se ha guardado</span><span class="spacer" />
-            <button class="btn" onClick={() => setProp(null)}>Descartar</button>
-            <button class="btn ok" disabled={prop.issues.length > 0} onClick={apply}>Aplicar al calendario</button>
-          </div>
-          {prop.issues.length ? <Alert kind="bad" title="La propuesta tiene conflictos" items={prop.issues.slice(0, 6).map((i) => describeIssue(i, nameOf))} />
-            : <Alert kind="ok" title="Cumple todas las reglas todos los días del año." />}
-          {prop.crossDays > 0 && <Alert kind="info" title={`Un camarero y un cocinero coinciden de vacaciones ${prop.crossDays} día${prop.crossDays > 1 ? 's' : ''}`} items={['El generador ya las coloca para que coincidan lo menos posible con los días disponibles.']} />}
-          {Object.keys(prop.unassigned).length > 0 && <Alert kind="warn" title="No se pudieron colocar todos los días" items={Object.entries(prop.unassigned).map(([id, n]) => `${nameOf(Number(id))}: faltan ${n} días`)} />}
-          {prop.reinforcements.length > 0 && <Alert kind="info" title={`La propuesta incluye ${prop.reinforcements.length} periodos de suplente en cocina`} items={prop.reinforcements.map((r) => `${groupLabel(r.team, r.shift)}: ${formatRange(r.start, r.end)} (${r.note})`)} />}
-          <div>
-            <div class="small muted" style="margin-bottom:6px">Días de vacaciones por mes (todo el equipo)</div>
-            <div class="bars">{prop.monthLoad.map((v, i) => <div key={i}><span>{v}</span><div class="b" style={{ height: `${(v / maxLoad) * 85}%` }} /><span>{MONTHS_SHORT[i]}</span></div>)}</div>
-          </div>
-          <div class="row"><div class="seg"><button class={view === 'year' ? 'on' : ''} onClick={() => setView('year')}>Año</button><button class={view === 'month' ? 'on' : ''} onClick={() => setView('month')}>Mes</button></div>
-            {view === 'month' && <div class="row"><button class="btn sm" onClick={() => setM((m + 11) % 12)}>‹</button><b style="min-width:90px;text-align:center">{MONTHS[m]}</b><button class="btn sm" onClick={() => setM((m + 1) % 12)}>›</button></div>}
-          </div>
-          {view === 'year' ? <YearView cal={cal} filters={{}} onDay={() => {}} onMonth={(mm) => { setM(mm); setView('month'); }} />
-            : <MonthView cal={cal} filters={{}} month={m} onMonth={setM} onDay={() => {}} previewIds={previewIds} />}
-          <div class="table-wrap"><table class="table">
-            <thead><tr><th>Trabajador</th><th>Periodos propuestos</th><th>Días</th></tr></thead>
-            <tbody>{data.staff.map((st) => {
-              const vs = previewVacs.filter((v) => v.worker_id === st.worker_id).sort((a, b) => (a.start < b.start ? -1 : 1));
-              return <tr key={st.worker_id}><td><GroupDot team={st.team} shift={st.shift} /> {st.name}</td><td class="small">{vs.map((v) => `${formatRange(v.start, v.end)} (${periodLength(v.start, v.end)})`).join(' · ')}</td><td>{vs.reduce((a, v) => a + periodLength(v.start, v.end), 0)}</td></tr>;
-            })}</tbody>
-          </table></div>
+          {res.understood.length > 0 && <div><b>He entendido</b><ul>{res.understood.map((u) => <li key={u.id}>{u.label}</li>)}</ul></div>}
+          {res.notUnderstood.length > 0 && <Alert kind="warn" title="No he entendido" items={res.notUnderstood.map((x) => `«${x.text}»: ${x.why}`)} />}
+          {res.ok ? <>
+            {res.extra.length > 0
+              ? <div><b>Para que se cumplan las reglas, también habría que cambiar</b><ul>{res.extra.map((x) => <li key={x.id}>{x.label}</li>)}</ul></div>
+              : <div>✅ Encaja tal cual, sin cambiar a nadie más.</div>}
+            <div class="row"><button class="btn ok" onClick={apply}>Aplicar {res.moves.length} cambio{res.moves.length === 1 ? '' : 's'}</button><button class="btn" onClick={() => setRes(null)}>Descartar</button></div>
+          </> : res.understood.length > 0 && (
+            <Alert kind="bad" title="No encuentro una forma de encajarlo sin romper las reglas" items={res.issues} />
+          )}
         </div>
       )}
-
-      <div class="card">
-        <div class="card-head"><h2>Preferencias de los trabajadores</h2><span class="spacer" /><button class="btn sm" onClick={() => setPref(true)}>＋ Añadir</button></div>
-        {data.preferences.length ? data.preferences.map((p) => (
-          <div class="list-item" key={p.id}><b>{nameOf(p.worker_id)}</b><span>{formatRange(p.start, p.end)}</span><span class="muted small">{p.note}</span><span class="spacer" />
-            <button class="btn ghost sm" onClick={async () => (await run(() => api('deletePreference', { id: p.id }))) && reload()}>Quitar</button></div>
-        )) : <div class="empty">Nadie ha indicado preferencias para {data.year}.</div>}
-      </div>
-      {pref && <PreferenceModal data={data} isAdmin onClose={() => setPref(false)} onDone={reload} />}
     </>
   );
 }
 
-// =============== AJUSTES (admin) ===============
 export function SettingsPage({ data, reload }) {
   const [mins, setMins] = useState(data.minimums);
   useEffect(() => setMins(data.minimums), [data]);
