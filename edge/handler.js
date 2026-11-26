@@ -60,10 +60,11 @@ Deno.serve(async (req) => {
       try { res = service.call(token, action, params); } catch (e) { err = e; }
       const after = JSON.stringify(state);
       if (after !== before) await tx`insert into app_state (id, data, updated_at) values (1, ${tx.json(state)}, now()) on conflict (id) do update set data = excluded.data, updated_at = now()`;
-      if (err) throw err;
-      return res ?? { ok: true };
+      // El error se lanza fuera de la transacción: así se guarda igualmente lo anterior (p. ej. la creación inicial).
+      return { res: res ?? { ok: true }, err };
     });
-    return json(result);
+    if (result.err) throw result.err;
+    return json(result.res);
   } catch (e) {
     if (e instanceof ApiError) return json({ error: e.message, details: e.details || [] }, e.status || 400);
     console.error(e);
