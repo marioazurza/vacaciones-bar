@@ -267,13 +267,13 @@ export function TeamPage({ data, reload, onYear }) {
             <div class="card-head"><ShiftTag shift={g.shift} /><GroupDot team={g.team} shift={g.shift} /><h2>{TEAMS[g.team]}</h2><span class="badge">{list.length} personas</span>
               <span class="small muted">Mínimo: {describeMinimumRow(data.minimums[g.team][g.shift])}</span></div>
             <div class="table-wrap"><table class="table">
-              <thead><tr><th>Nombre</th><th class="hide-mobile">Usuario</th><th>Días</th><th>Asignados</th><th class="hide-mobile">Disfrutados</th><th /></tr></thead>
+              <thead><tr><th>Nombre</th><th class="hide-mobile">Email</th><th>Días</th><th>Asignados</th><th class="hide-mobile">Disfrutados</th><th /></tr></thead>
               <tbody>{list.map((s) => {
                 const st = workerStats(s, data.vacations, data.today);
                 return (
                   <tr key={s.worker_id}>
                     <td><b>{s.name}</b>{s.flex ? <span class="badge" style="margin-left:6px">Suplente</span> : null}</td>
-                    <td class="hide-mobile muted">{s.username}</td>
+                    <td class="hide-mobile muted">{s.email || <span class="badge warn">sin email</span>}</td>
                     <td>{s.days}</td>
                     <td><span class={`badge ${st.assigned === s.days ? 'ok' : st.assigned > s.days ? 'bad' : 'warn'}`}>{st.assigned} / {s.days}</span></td>
                     <td class="hide-mobile">{st.enjoyed}</td>
@@ -295,7 +295,7 @@ function WorkerModal({ data, initial, onClose, onDone }) {
   const [f, setF] = useState({ first_name: '', last_name: '', username: '', password: '', ...initial });
   const set = (k) => (e) => setF({ ...f, [k]: e.currentTarget.value });
   const save = async () => {
-    const ok = await run(() => api('saveWorker', { id: initial.worker_id, year: data.year, first_name: f.first_name, last_name: f.last_name, team: f.team, shift: f.shift, days: Number(f.days), flex: !!f.flex, username: f.username, password: f.password }), 'Trabajador guardado');
+    const ok = await run(() => api('saveWorker', { id: initial.worker_id, year: data.year, first_name: f.first_name, last_name: f.last_name, team: f.team, shift: f.shift, days: Number(f.days), flex: !!f.flex, email: f.email, username: f.username, password: f.password }), 'Trabajador guardado');
     if (ok) { onDone(); onClose(); }
   };
   return (
@@ -307,6 +307,7 @@ function WorkerModal({ data, initial, onClose, onDone }) {
         <Field label="Puesto"><select class="input" value={f.team} onChange={set('team')}>{Object.entries(TEAMS).map(([k, t]) => <option key={k} value={k}>{t}</option>)}</select></Field>
         <Field label="Turno"><select class="input" value={f.shift} onChange={set('shift')}>{Object.entries(SHIFTS).map(([k, t]) => <option key={k} value={k}>{t}</option>)}</select></Field>
         <Field label="Días de vacaciones al año"><input class="input" type="number" min="0" max="60" value={f.days} onInput={set('days')} /></Field>
+        <Field label="Email (para entrar)"><input class="input" type="email" value={f.email || ''} onInput={set('email')} placeholder="nombre@ejemplo.com" /></Field>
         <Field label="Usuario para entrar"><input class="input" value={f.username} onInput={set('username')} placeholder="se genera con el nombre" /></Field>
         <Field label={initial.worker_id ? 'Nueva contraseña (opcional)' : 'Contraseña (por defecto 1234)'}><input class="input" type="text" value={f.password} onInput={set('password')} /></Field>
       </div>

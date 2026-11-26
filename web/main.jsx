@@ -30,21 +30,36 @@ function useRoute(def) {
 function Login({ onLogin }) {
   const [u, setU] = useState('');
   const [p, setP] = useState('');
+  const [mail, setMail] = useState('');
+  const [nm, setNm] = useState('');
+  const [asAdmin, setAsAdmin] = useState(!runtime.emailLogin);
   const [err, setErr] = useState('');
+  const [busy, setBusy] = useState(false);
   const submit = async (e, user = u, pass = p) => {
     e?.preventDefault();
-    setErr('');
-    try { const r = await api('login', { username: user, password: pass }); onLogin(r.user); } catch (x) { setErr(x.message); }
+    setErr(''); setBusy(true);
+    try {
+      const r = asAdmin || user !== u ? await api('login', { username: user, password: pass }) : await api('login', { email: mail, name: nm });
+      onLogin(r.user);
+    } catch (x) { setErr(x.message); }
+    setBusy(false);
   };
   return (
     <div class="login">
       {/* Sin <form> nativo: algunos visores incrustados bloquean el envío de formularios. */}
       <div class="card stack" onKeyDown={(e) => { if (e.key === 'Enter' && e.target.tagName === 'INPUT') submit(e); }}>
         <div class="brand" style="padding:0"><div class="brand-logo">🌴</div><div>Vacaciones del bar<div class="small muted" style="font-weight:400">Calendario del equipo</div></div></div>
-        <Field label="Usuario"><input class="input" autoComplete="username" autoCapitalize="none" autoCorrect="off" spellcheck={false} value={u} onInput={(e) => setU(e.currentTarget.value)} autoFocus /></Field>
-        <Field label="Contraseña"><PasswordInput id="login-pw" autoComplete="current-password" value={p} onInput={(e) => setP(e.currentTarget.value)} /></Field>
+        {asAdmin ? <>
+          {runtime.emailLogin && <b>Entrar como administrador</b>}
+          <Field label="Usuario"><input class="input" autoComplete="username" autoCapitalize="none" autoCorrect="off" spellcheck={false} value={u} onInput={(e) => setU(e.currentTarget.value)} autoFocus /></Field>
+          <Field label="Contraseña"><PasswordInput id="login-pw" autoComplete="current-password" value={p} onInput={(e) => setP(e.currentTarget.value)} /></Field>
+        </> : <>
+          <Field label="Tu email"><input class="input" type="email" autoComplete="email" autoCapitalize="none" autoCorrect="off" spellcheck={false} value={mail} onInput={(e) => setMail(e.currentTarget.value)} autoFocus /></Field>
+          <Field label="Tu nombre"><input class="input" autoComplete="given-name" value={nm} onInput={(e) => setNm(e.currentTarget.value)} placeholder="Por ejemplo: Gemma" /></Field>
+        </>}
         {err && <Alert kind="bad" title={err} />}
-        <button class="btn primary" type="button" id="login-btn" style="justify-content:center" onClick={submit}>Entrar</button>
+        <button class="btn primary" type="button" id="login-btn" style="justify-content:center" disabled={busy} onClick={submit}>{busy ? 'Entrando…' : 'Entrar'}</button>
+        {runtime.emailLogin && <button type="button" class="btn ghost sm" style="justify-content:center" onClick={() => { setAsAdmin(!asAdmin); setErr(''); }}>{asAdmin ? '← Entrar como trabajador' : '🔑 Entrar como administrador'}</button>}
         {runtime.demo && (
           <div class="stack" style="gap:6px">
             <div class="small muted">Versión de prueba: el administrador entra con su usuario y contraseña. Para ver la app como un trabajador, entra con un clic:</div>

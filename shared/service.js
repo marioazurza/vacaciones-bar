@@ -221,7 +221,19 @@ export function createService({ repo, hashPassword, verifyPassword, randomToken,
 
   // ---------- acciones ----------
   const actions = {
-    login({ username, password }) {
+    login({ username, password, email, name }) {
+      if (email != null) {
+        // Trabajadores: entran con su email y su nombre (los dos tienen que coincidir).
+        const norm = (x) => String(x || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/\s+/g, ' ').trim();
+        const mail = norm(email), nm = norm(name);
+        const w = mail && repo.all('workers').find((x) => norm(x.email) === mail);
+        const ok = w && nm && (norm(w.first_name) === nm || norm(`${w.first_name} ${w.last_name}`) === nm || norm(w.first_name).split(' ')[0] === nm);
+        const wu = ok ? repo.all('users', { worker_id: w.id })[0] : null;
+        if (!wu) throw new ApiError(401, 'El email y el nombre no coinciden con nadie del equipo. Pide al administrador que revise tu email.');
+        const token = randomToken();
+        repo.insert('sessions', { token, user_id: wu.id, created_at: now() });
+        return { token, user: userFromToken(token) };
+      }
       const u = repo.all('users', { username: String(username || '').trim().toLowerCase() })[0];
       const pw = String(password || '');
       if (!u || !(verifyPassword(pw, u.password_hash) || (pw !== pw.trim() && verifyPassword(pw.trim(), u.password_hash)))) throw new ApiError(401, 'Usuario o contraseña incorrectos.');
@@ -259,7 +271,7 @@ export function createService({ repo, hashPassword, verifyPassword, randomToken,
       const isAdmin = user.role === 'admin';
       const wmap = workersById();
       const visible = y && (isAdmin || y.status === 'publicado');
-      const staff = y ? repo.all('staff', { year }).map((s) => ({ ...s, name: workerName(wmap.get(s.worker_id)), first_name: wmap.get(s.worker_id)?.first_name, last_name: wmap.get(s.worker_id)?.last_name })) : [];
+      const staff = y ? repo.all('staff', { year }).map((s) => ({ ...s, name: workerName(wmap.get(s.worker_id)), first_name: wmap.get(s.worker_id)?.first_name, last_name: wmap.get(s.worker_id)?.last_name, ...(isAdmin ? { email: wmap.get(s.worker_id)?.email || '' } : {}) })) : [];
       const users = repo.all('users');
       if (isAdmin) for (const s of staff) s.username = users.find((u) => u.worker_id === s.worker_id)?.username || '';
       const reqs = repo.all('requests', { year }).filter((r) => isAdmin || r.requester_id === user.worker_id || r.target_id === user.worker_id);
@@ -332,6 +344,9 @@ export function createService({ repo, hashPassword, verifyPassword, randomToken,
       if (!TEAMS[p.team] || !SHIFTS[p.shift]) throw new ApiError(400, 'Puesto o turno no válido.');
       const days = Math.floor(Number(p.days ?? DEFAULT_ANNUAL_DAYS));
       const flex = !!p.flex;
+      const email = String(p.email || '').trim().toLowerCase();
+      if (email && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) throw new ApiError(400, 'El email no es válido.');
+      if (email && repo.all('workers').some((x) => (x.email || '').toLowerCase() === email && x.id !== Number(p.id))) throw new ApiError(400, 'Ese email ya lo tiene otra persona.');
       if (!(days >= 0 && days <= 60)) throw new ApiError(400, 'Los días de vacaciones deben estar entre 0 y 60.');
       const username = String(p.username || slug(first)).trim().toLowerCase();
       if (!/^[a-z0-9._-]{2,30}$/.test(username)) throw new ApiError(400, 'El usuario solo puede tener letras sin acentos, números, punto o guion.');
@@ -351,7 +366,7 @@ export function createService({ repo, hashPassword, verifyPassword, randomToken,
         } else if (!st) {
           repo.insert('staff', { year, worker_id: workerId, team: p.team, shift: p.shift, days, flex: flex ? 1 : 0 });
         }
-        repo.update('workers', workerId, { first_name: first, last_name: last });
+        repo.update('workers', workerId, { first_name: first, last_name: last, email });
         if (u) {
           const patch = { username };
           if (p.password) patch.password_hash = hashPassword(String(p.password));
@@ -360,7 +375,7 @@ export function createService({ repo, hashPassword, verifyPassword, randomToken,
         log(user, year, 'Trabajador editado', `${first} ${last} · ${groupLabel(p.team, p.shift)} · ${days} días.`);
       } else {
         if (clash) throw new ApiError(400, `El usuario "${username}" ya existe.`);
-        const w = repo.insert('workers', { first_name: first, last_name: last, created_at: now() });
+        const w = repo.insert('workers', { first_name: first, last_name: last, email, created_at: now() });
         workerId = w.id;
         repo.insert('staff', { year, worker_id: workerId, team: p.team, shift: p.shift, days, flex: flex ? 1 : 0 });
         repo.insert('users', { username, password_hash: hashPassword(String(p.password || '1234')), role: 'worker', worker_id: workerId, created_at: now() });

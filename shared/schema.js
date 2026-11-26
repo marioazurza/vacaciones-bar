@@ -4,7 +4,7 @@
 export const SCHEMA = {
   users: ['username', 'password_hash', 'role', 'worker_id', 'created_at'],
   sessions: ['token', 'user_id', 'created_at'],
-  workers: ['first_name', 'last_name', 'created_at'],
+  workers: ['first_name', 'last_name', 'email', 'created_at'],
   years: ['year', 'status', 'published_at'],
   staff: ['year', 'worker_id', 'team', 'shift', 'days', 'flex'],
   vacations: ['year', 'worker_id', 'start', 'end', 'note', 'created_at'],

@@ -51,3 +51,26 @@ writeFileSync('dist-demo/vacaciones-demo.html', html(`<script>${js}</script>`, `
 writeFileSync('dist-demo/artifact.html', `<title>Vacaciones del bar</title>\n<style>${css}</style>\n<div id="app"></div>\n<script>${js}</script>\n`);
 rmSync('dist-demo/tmp', { recursive: true, force: true });
 console.log('Compilado: dist/ y dist-demo/vacaciones-demo.html');
+
+// Versión publicada (GitHub Pages) con datos compartidos en Supabase.
+mkdirSync('dist-cloud', { recursive: true });
+await build({
+  ...common, entryPoints: { cloud: 'web/entry-cloud.jsx' }, outdir: 'dist-cloud/tmp', format: 'iife',
+  define: {
+    __CLOUD_API__: JSON.stringify(process.env.CLOUD_API || 'https://natreivwsrbxfufjrgin.supabase.co/functions/v1/api'),
+    __CLOUD_KEY__: JSON.stringify(process.env.CLOUD_KEY || 'sb_publishable_tZsTxUPDRt7cJfvTGWQpOQ_gEp_wIiz'),
+  },
+});
+{
+  const cj = readFileSync('dist-cloud/tmp/cloud.js', 'utf8').replace(/<\/script/gi, '<\\/script');
+  const cc = readFileSync('dist-cloud/tmp/cloud.css', 'utf8');
+  writeFileSync('dist-cloud/index.html', html(`<script>${cj}</script>`, `<style>${cc}</style>`));
+  rmSync('dist-cloud/tmp', { recursive: true, force: true });
+}
+
+// Servidor para Supabase (Edge Function "api"): un único archivo.
+await build({
+  ...common, entryPoints: ['edge/handler.js'], outfile: 'dist-edge/index.js', format: 'esm', platform: 'neutral',
+  external: ['npm:*', 'node:*'],
+});
+console.log('Compilado: dist-edge/index.js (Supabase)');
