@@ -39,7 +39,9 @@ function Login({ onLogin }) {
     e?.preventDefault();
     setErr(''); setBusy(true);
     try {
-      const r = asAdmin || user !== u ? await api('login', { username: user, password: pass }) : await api('login', { email: mail, name: nm });
+      const r = user !== u ? await api('login', { username: user, password: pass })
+        : asAdmin ? await api('login', runtime.emailLogin ? { password: pass } : { username: user, password: pass })
+          : await api('login', { email: mail, name: nm });
       onLogin(r.user);
     } catch (x) { setErr(x.message); }
     setBusy(false);
@@ -51,7 +53,7 @@ function Login({ onLogin }) {
         <div class="brand" style="padding:0"><div class="brand-logo">🌴</div><div>Vacaciones del bar<div class="small muted" style="font-weight:400">Calendario del equipo</div></div></div>
         {asAdmin ? <>
           {runtime.emailLogin && <b>Entrar como administrador</b>}
-          <Field label="Usuario"><input class="input" autoComplete="username" autoCapitalize="none" autoCorrect="off" spellcheck={false} value={u} onInput={(e) => setU(e.currentTarget.value)} autoFocus /></Field>
+          {!runtime.emailLogin && <Field label="Usuario"><input class="input" autoComplete="username" autoCapitalize="none" autoCorrect="off" spellcheck={false} value={u} onInput={(e) => setU(e.currentTarget.value)} autoFocus /></Field>}
           <Field label="Contraseña"><PasswordInput id="login-pw" autoComplete="current-password" value={p} onInput={(e) => setP(e.currentTarget.value)} /></Field>
         </> : <>
           <Field label="Tu email"><input class="input" type="email" autoComplete="email" autoCapitalize="none" autoCorrect="off" spellcheck={false} value={mail} onInput={(e) => setMail(e.currentTarget.value)} autoFocus /></Field>

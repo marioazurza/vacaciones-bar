@@ -234,9 +234,12 @@ export function createService({ repo, hashPassword, verifyPassword, randomToken,
         repo.insert('sessions', { token, user_id: wu.id, created_at: now() });
         return { token, user: userFromToken(token) };
       }
-      const u = repo.all('users', { username: String(username || '').trim().toLowerCase() })[0];
       const pw = String(password || '');
-      if (!u || !(verifyPassword(pw, u.password_hash) || (pw !== pw.trim() && verifyPassword(pw.trim(), u.password_hash)))) throw new ApiError(401, 'Usuario o contraseña incorrectos.');
+      // Sin usuario: es el administrador, que entra solo con su contraseña.
+      const u = String(username || '').trim()
+        ? repo.all('users', { username: String(username).trim().toLowerCase() })[0]
+        : repo.all('users', { role: 'admin' }).find((a) => verifyPassword(pw, a.password_hash) || verifyPassword(pw.trim(), a.password_hash));
+      if (!u || !(verifyPassword(pw, u.password_hash) || (pw !== pw.trim() && verifyPassword(pw.trim(), u.password_hash)))) throw new ApiError(401, String(username || '').trim() ? 'Usuario o contraseña incorrectos.' : 'Contraseña incorrecta.');
       const token = randomToken();
       repo.insert('sessions', { token, user_id: u.id, created_at: now() });
       return { token, user: userFromToken(token) };

@@ -287,3 +287,9 @@ test('un trabajador mueve su quincena: libre se guarda; si choca, pide los días
   // Fechas en verano: no se puede.
   err(() => service.call(gemma, 'moveMyVacation', { year: 2027, id: g.id, start: '2027-07-01', end: '2027-07-15' }));
 });
+
+test('el administrador puede entrar solo con su contraseña', () => {
+  const { service } = setup();
+  assert.equal(service.call(null, 'login', { password: 'admin' }).user.role, 'admin');
+  assert.match(err(() => service.call(null, 'login', { password: 'mal' })).message, /Contraseña incorrecta/);
+});
