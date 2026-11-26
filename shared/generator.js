@@ -312,7 +312,7 @@ export function generateRotation(ctx, opts = {}) {
   // Máximo por turno con cocina y sala juntas: días ocupados por turno.
   const maxAll = ctx.maxOffPerShiftAll == null || ctx.maxOffPerShiftAll === '' ? null : Number(ctx.maxOffPerShiftAll);
   const shiftOcc = { M: new Array(N).fill(0), T: new Array(N).fill(0) };
-  const mark = (s, a, b) => { const p = pools[poolKeyOf(s)]; for (let i = Math.max(0, a); i <= Math.min(N - 1, b); i++) { p.occ[i] = 1; teamOcc[s.team][i] = 1; if (shiftOcc[s.shift] && !s.flex) shiftOcc[s.shift][i]++; } };
+  const mark = (s, a, b) => { const p = pools[poolKeyOf(s)]; for (let i = Math.max(0, a); i <= Math.min(N - 1, b); i++) { p.occ[i] = 1; teamOcc[s.team][i] = 1; if (shiftOcc[s.shift]) shiftOcc[s.shift][i]++; } };
   for (const v of fixed) {
     const s = byId.get(v.worker_id);
     if (!s) continue;
@@ -345,7 +345,7 @@ export function generateRotation(ctx, opts = {}) {
     if (m && m.win != null && (a < windows[m.win][0] || a + L - 1 > windows[m.win][1])) return false;
     for (let i = a; i < a + L; i++) {
       if (blocked[i] || p.occ[i]) return false;
-      if (maxAll != null && m && !m.flex && shiftOcc[m.shift] && shiftOcc[m.shift][i] >= maxAll) return false;
+      if (maxAll != null && m && shiftOcc[m.shift] && shiftOcc[m.shift][i] >= maxAll) return false;
     }
     return true;
   };
@@ -395,12 +395,17 @@ export function generateRotation(ctx, opts = {}) {
       // días en que otro equipo ya está de vacaciones; si no cabe, se permite.
       const chainOf = (soft) => {
         const ok = (a, m) => hardFree(pool, a, m) && (!soft || cross(pool.team, a) === 0);
-        const out = [];
+        // En cada hueco va el primero de la cola (de la ventana más temprana pendiente) que
+        // pueda ir ahí; si nadie puede, se avanza un día. Así se aprovechan los huecos.
+        const out = new Array(queue.length);
+        const left = queue.map((_, k) => k);
         let c = s0;
-        for (let k = 0; k < queue.length; k++) {
-          while (c + L <= N && !ok(c, queue[k])) c++;
+        while (left.length) {
           if (c + L > N) return null;
-          out.push(c); c += L;
+          const w = queue[left[0]].win;
+          const pos = left.findIndex((k) => queue[k].win === w && ok(c, queue[k]) && !left.some((j) => j !== k && queue[j].worker_id === queue[k].worker_id && j < k && queue[j].win === w));
+          if (pos < 0) { c++; continue; }
+          out[left[pos]] = c; left.splice(pos, 1); c += L;
         }
         return { out, ok };
       };
@@ -409,12 +414,14 @@ export function generateRotation(ctx, opts = {}) {
         // El último tramo se pega al final de su hueco libre: lo que quede libre queda junto
         // y lo pueden usar los demás equipos sin coincidir.
         const out = ch.out;
-        const last = out[out.length - 1];
-        let first = out.length - 1;
-        while (first > 0 && out[first - 1] + L === out[first]) first--;
+        const idx = out.map((_, k) => k).sort((x, y) => out[x] - out[y]);
+        let first = idx.length - 1;
+        while (first > 0 && out[idx[first - 1]] + L === out[idx[first]]) first--;
+        const run = idx.slice(first);
         let shift = 0;
-        while (last + shift + 1 + L <= N && ch.ok(last + shift + 1, queue[out.length - 1]) && hardFreeRange(out[first] + shift + 1, last + shift + L)) shift++;
-        if (shift && first > 0) for (let k = first; k < out.length; k++) out[k] += shift;
+        const canShift = (d) => run.every((k) => out[k] + d + L <= N && ch.ok(out[k] + d, queue[k])) && hardFreeRange(out[run[0]] + d, out[run[run.length - 1]] + d + L - 1);
+        while (canShift(shift + 1)) shift++;
+        if (shift && first > 0) for (const k of run) out[k] += shift;
         out.forEach((a, k) => put(queue[k], a));
         return;
       }

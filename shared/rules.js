@@ -172,14 +172,12 @@ export function analyze(ctx) {
   // de mañana no pueden estar de vacaciones a la vez; con uno de tarde sí).
   const maxAll = ctx.maxOffPerShiftAll == null || ctx.maxOffPerShiftAll === '' ? null : Number(ctx.maxOffPerShiftAll);
   if (maxAll != null) {
-    const flexIds = new Set((ctx.staff || []).filter((s) => s.flex).map((s) => s.worker_id));
     const teamOfId = new Map((ctx.staff || []).map((s) => [s.worker_id, s.team]));
     for (const shift of Object.keys(SHIFTS)) {
       const gs = Object.values(groups).filter((g) => g.shift === shift);
       if (!gs.length) continue;
       for (let i = 0; i < N; i++) {
-        // El suplente (flex) no tiene turno fijo: puede coincidir con cualquier cocinero.
-        const off = [...new Set(gs.flatMap((g) => g.off[i]))].filter((id) => !flexIds.has(id));
+        const off = [...new Set(gs.flatMap((g) => g.off[i]))];
         const extra = gs.reduce((a, g) => a + g.extra[i], 0);
         if (off.length > maxAll + extra) {
           // Si todos son del mismo equipo, ya lo avisa la regla del equipo: no se repite.

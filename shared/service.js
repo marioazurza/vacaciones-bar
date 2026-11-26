@@ -58,7 +58,7 @@ export const BAR_WORKERS = [
   ['Edar', 'Centeno González', 'sala', 'T'],
   ['Gerardo', 'Intriago Mero', 'sala', 'T'],
   ['Ayman', 'Rija', 'sala', 'T'],
-  // Suplente: cubre las vacaciones de los camareros; cuando él coge las suyas puede coincidir con cualquier cocinero.
+  // Suplente: cubre las vacaciones de los camareros. No coincide con otro camarero ni con un cocinero de su turno.
   ['Edwin', 'Báez Rivera', 'sala', 'T', true],
 ];
 

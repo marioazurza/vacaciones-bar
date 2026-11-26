@@ -231,10 +231,10 @@ test('plantilla del bar: en sala nunca más de un camarero de vacaciones a la ve
     const k = x.toISOString().slice(0, 10);
     assert.ok(!cook.has(k), `dos cocineros de vacaciones el ${k}`);
     cook.set(k, v.worker_id);
-    if (days.has(k) && !flexOf.get(days.get(k))) assert.notEqual(shiftOf.get(days.get(k)), shiftOf.get(v.worker_id), `cocinero y camarero del mismo turno el ${k}`);
+    if (days.has(k)) assert.notEqual(shiftOf.get(days.get(k)), shiftOf.get(v.worker_id), `cocinero y camarero del mismo turno el ${k}`);
   }
   assert.equal(cook.size, 4 * 30);
-  // Edwin (suplente) nunca coincide con otro camarero, y sí puede con cualquier cocinero.
+  // Edwin (suplente) nunca coincide con otro camarero ni con un cocinero de su turno.
   const edwin = d.staff.find((s) => s.first_name === 'Edwin');
   assert.ok(edwin.flex);
   assert.equal([...days.values()].filter((id) => id === edwin.worker_id).length, 30);

@@ -284,7 +284,7 @@ function WorkerModal({ data, initial, onClose, onDone }) {
         <Field label="Usuario para entrar"><input class="input" value={f.username} onInput={set('username')} placeholder="se genera con el nombre" /></Field>
         <Field label={initial.worker_id ? 'Nueva contraseña (opcional)' : 'Contraseña (por defecto 1234)'}><input class="input" type="text" value={f.password} onInput={set('password')} /></Field>
       </div>
-      <label class="row" style="gap:8px;margin:4px 0"><input type="checkbox" checked={!!f.flex} onChange={(e) => setF({ ...f, flex: e.currentTarget.checked })} /> Suplente: cubre los dos turnos y sus vacaciones pueden coincidir con las de cualquier cocinero</label>
+      <label class="row" style="gap:8px;margin:4px 0"><input type="checkbox" checked={!!f.flex} onChange={(e) => setF({ ...f, flex: e.currentTarget.checked })} /> Suplente: cubre las vacaciones de los demás (sus vacaciones van primero a antes del verano si no caben todos después)</label>
       <div class="small muted">Si cambias el puesto, el turno o los días, se comprueba que el calendario siga cumpliendo la cobertura mínima.</div>
     </Modal>
   );
