@@ -173,7 +173,7 @@ function DragBar({ v, cls, style, title, label, onClick, onMove, days }) {
   );
 }
 
-function TimelineView({ cal, filters, from, n, title, wide, onDay, onBar, onPick, onMove, previewIds, fixedLength = 0, wrapRef, onScroll, months, fit }) {
+function TimelineView({ cal, filters, from, n, title, wide, onDay, onBar, onPick, onMove, canMove, previewIds, fixedLength = 0, wrapRef, onScroll, months, fit }) {
   const [sel, setSel] = useState(null);
   const last = addDays(from, n - 1);
   const yStart = `${cal.year}-01-01`, yEnd = `${cal.year}-12-31`;
@@ -202,7 +202,7 @@ function TimelineView({ cal, filters, from, n, title, wide, onDay, onBar, onPick
   const bar = (key, r, a, b, cls, label, tip, onClick, v) => {
     const aa = a < from ? from : a, bb = b > last ? last : b;
     const style = { gridRow: r, gridColumn: `${col(aa)} / ${col(bb) + 1}` };
-    if (v && onMove) { items.push(<DragBar key={key} v={v} cls={cls} style={style} title={`${tip} · Arrastra para moverla`} label={label} onClick={onClick} onMove={onMove} days={diffDays(aa, bb) + 1} />); return; }
+    if (v && onMove && (!canMove || canMove(v))) { items.push(<DragBar key={key} v={v} cls={cls} style={style} title={`${tip} · Arrastra para moverla`} label={label} onClick={onClick} onMove={onMove} days={diffDays(aa, bb) + 1} />); return; }
     items.push(<div key={key} class={cls} style={style} title={tip} onClick={onClick}>{label}</div>);
   };
 

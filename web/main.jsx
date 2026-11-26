@@ -15,10 +15,9 @@ const NAV_ADMIN = [
   ['ajustes', '⚙️', 'Ajustes'],
   ['historial', '🕘', 'Historial'],
 ];
+// Los trabajadores solo ven el calendario (allí aceptan o rechazan peticiones de días).
 const NAV_WORKER = [
-  ['mis-vacaciones', '🌴', 'Mis vacaciones'],
   ['calendario', '📅', 'Calendario'],
-  ['solicitudes', '📨', 'Solicitudes'],
 ];
 
 function useRoute(def) {
@@ -107,7 +106,7 @@ function Shell({ user, onLogout }) {
   const [year, setYear] = useState(() => {
     try { const y = Number(localStorage.getItem('vac-year')); if (y) return y; } catch { /* */ }
     const t = todayISO();
-    return Number(t.slice(0, 4)) + (isAdmin && t.slice(5, 7) >= '10' ? 1 : 0);
+    return Number(t.slice(0, 4)) + (t.slice(5, 7) >= '10' ? 1 : 0);
   });
   const [data, setData] = useState(null);
   const [saved, setSaved] = useState(null);

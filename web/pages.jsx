@@ -29,6 +29,17 @@ export function CalendarPage({ data, reload, isAdmin, me }) {
   const issues = cal.analysis.issues;
   const goMonth = (mm) => { setM(mm); setView('month'); };
   // Arrastrar una barra: mueve el periodo entero los días indicados.
+  // Un trabajador mueve su quincena: si choca con un compañero, se le piden sus días.
+  const moveMine = async (v, d) => {
+    const start = addDays(v.start, d), end = addDays(v.end, d);
+    const r = await run(() => api('moveMyVacation', { year: data.year, id: v.id, start, end }));
+    if (!r) return;
+    toast(r.moved ? `Vacaciones movidas: ${formatRange(start, end)}` : `Coincide con ${r.requested}. Le hemos enviado la petición de sus días ${formatRange(r.start, r.end)}.`, 'ok');
+    reload();
+  };
+  const incoming = data.requests.filter((r) => r.type === 'dias' && r.target_id === me && r.status === 'esperando_companero');
+  const outgoing = data.requests.filter((r) => r.type === 'dias' && r.requester_id === me && r.status === 'esperando_companero');
+  const canMove = isAdmin ? null : (v) => v.worker_id === me && v.start > data.today;
   const moveBar = async (v, d) => {
     const start = addDays(v.start, d), end = addDays(v.end, d);
     const ok = await run(() => api('saveVacation', { id: v.id, year: data.year, worker_id: v.worker_id, start, end }), `${nameOf(v.worker_id)}: ${formatRange(start, end)}`);
@@ -50,15 +61,31 @@ export function CalendarPage({ data, reload, isAdmin, me }) {
       {issues.length > 0 && (
         <Alert kind="bad" title={`Hay ${issues.length} conflicto${issues.length > 1 ? 's' : ''} en el calendario`} items={issues.slice(0, 5).map((i) => describeIssue(i, nameOf)).concat(issues.length > 5 ? [`… y ${issues.length - 5} más`] : [])} />
       )}
+      {incoming.map((r) => (
+        <Alert key={r.id} kind="info" title={`${nameOf(r.requester_id)} te pide tus días`}>
+          <div>Te pide tu quincena <b>{formatRange(r.data.b.start, r.data.b.end)}</b>. Si aceptas, os cambiáis y tú pasas al <b>{formatRange(r.data.a.start, r.data.a.end)}</b>.</div>
+          <div class="row" style="margin-top:8px">
+            <button class="btn ok sm" onClick={async () => (await run(() => api('respondDays', { id: r.id, accept: true }), 'Aceptado: ya tenéis las fechas cambiadas')) && reload()}>Aceptar</button>
+            <button class="btn sm" onClick={async () => (await run(() => api('respondDays', { id: r.id, accept: false }), 'Petición rechazada')) && reload()}>Rechazar</button>
+          </div>
+        </Alert>
+      ))}
+      {outgoing.map((r) => (
+        <Alert key={r.id} kind="warn" title={`Esperando a ${nameOf(r.target_id)}`}>
+          <div>Le has pedido su quincena <b>{formatRange(r.data.b.start, r.data.b.end)}</b> a cambio de la tuya <b>{formatRange(r.data.a.start, r.data.a.end)}</b>.</div>
+          <div class="row" style="margin-top:8px"><button class="btn sm" onClick={async () => (await run(() => api('cancelRequest', { id: r.id }), 'Petición anulada')) && reload()}>Anular</button></div>
+        </Alert>
+      ))}
+      {!isAdmin && data.status === 'publicado' && <div class="small muted">Mantén pulsada una de tus quincenas y arrástrala para cambiarla de fecha. Si coincide con un compañero, se le pedirá que os cambiéis.</div>}
       <div class="row cal-tools">
         <Filters staff={data.staff} value={filters} onChange={setFilters} />
       </div>
       {view === 'year' && <YearView cal={cal} filters={filters} onDay={setDay} onMonth={goMonth} />}
       {view === 'month' && <MonthView cal={cal} filters={filters} month={m} onMonth={setM} onDay={setDay}
-        onBar={isAdmin ? (v) => setEdit(v) : null} onMove={isAdmin ? moveBar : null}
+        onBar={isAdmin ? (v) => setEdit(v) : null} onMove={isAdmin ? moveBar : data.status === 'publicado' ? moveMine : null} canMove={canMove}
         onPick={isAdmin ? (worker_id, start, end) => setEdit({ worker_id, start, end }) : null} fixedLength={data.periodRules?.periodLength || 0} />}
       {view === 'week' && <WeekView cal={cal} filters={filters} start={wk} onDay={setDay}
-        onBar={isAdmin ? (v) => setEdit(v) : null} onMove={isAdmin ? moveBar : null}
+        onBar={isAdmin ? (v) => setEdit(v) : null} onMove={isAdmin ? moveBar : data.status === 'publicado' ? moveMine : null} canMove={canMove}
         onPick={isAdmin ? (worker_id, start, end) => setEdit({ worker_id, start, end }) : null} fixedLength={data.periodRules?.periodLength || 0} />}
       {day && <DayModal cal={cal} date={day} onClose={() => setDay(null)} canEdit={isAdmin} onAdd={(d) => { setDay(null); setEdit({ start: d, end: d }); }} />}
       {edit && <VacationModal data={data} initial={edit} onClose={() => setEdit(null)} onDone={reload} />}
@@ -170,7 +197,7 @@ function RequestList({ data, reload, me, isAdmin, onlyOpen }) {
       {list.map((r) => (
         <div class="list-item" key={r.id}>
           <div style="flex:1;min-width:240px">
-            <div class="row"><span class="badge">{r.type === 'cambio' ? 'Cambio' : 'Intercambio'}</span><StatusBadge status={r.status} />{(isAdmin || r.requester_id !== me) && <b>{nameOf(r.requester_id)}{r.target_id ? ` ↔ ${nameOf(r.target_id)}` : ''}</b>}</div>
+            <div class="row"><span class="badge">{r.type === 'cambio' ? 'Cambio' : r.type === 'dias' ? 'Petición de días' : 'Intercambio'}</span><StatusBadge status={r.status} />{(isAdmin || r.requester_id !== me) && <b>{nameOf(r.requester_id)}{r.target_id ? ` ↔ ${nameOf(r.target_id)}` : ''}</b>}</div>
             <div style="margin-top:4px">{describeRequest(r, nameOf)}</div>
             <div class="small muted">{new Date(r.created_at).toLocaleString('es-ES', { dateStyle: 'medium', timeStyle: 'short' })}{r.comment ? ` · «${r.comment}»` : ''}{r.admin_comment ? ` · Respuesta: ${r.admin_comment}` : ''}</div>
           </div>

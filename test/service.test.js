@@ -253,3 +253,37 @@ test('plantilla del bar: en sala nunca más de un camarero de vacaciones a la ve
   const ct2 = d.staff.find((s) => s.team === 'cocina' && s.shift === 'T' && s.worker_id !== ct.worker_id);
   err(() => service.call(admin, 'saveVacation', { year: 2027, worker_id: ct2.worker_id, start: '2027-12-05', end: '2027-12-19' }));
 });
+
+test('un trabajador mueve su quincena: libre se guarda; si choca, pide los días al compañero', () => {
+  const repo = openRepo(':memory:');
+  let n = 0;
+  const service = createService({ repo, hashPassword: (p) => `x:${p}`, verifyPassword: (p, h) => h === `x:${p}`, randomToken: () => `t${++n}`, today: () => '2026-11-24' });
+  service.seed({ workers: BAR_WORKERS });
+  const login = (u) => service.call(null, 'login', { username: u, password: u === 'admin' ? 'admin' : '1234' }).token;
+  const admin = login('admin');
+  service.call(admin, 'publishYear', { year: 2027 });
+  const gemma = login('gemma'), lasha = login('lasha'), tania = login('tania');
+  const d = service.call(gemma, 'getYear', { year: 2027 });
+  const id = (name) => d.staff.find((s) => s.first_name === name).worker_id;
+  const vac = (name, month) => d.vacations.find((v) => v.worker_id === id(name) && v.start.slice(5, 7) === month);
+  const g = vac('Gemma', '10'), l = vac('Lasha', '10');
+  // No puede mover las de otro.
+  err(() => service.call(tania, 'moveMyVacation', { year: 2027, id: g.id, start: g.start, end: g.end }));
+  // Choca con Lasha: no se mueve y a Lasha le llega la petición.
+  const r = service.call(gemma, 'moveMyVacation', { year: 2027, id: g.id, start: '2027-10-10', end: '2027-10-24' });
+  assert.equal(r.moved, false);
+  assert.equal(r.requested, 'Lasha Kabzinadze');
+  const after = service.call(gemma, 'getYear', { year: 2027 });
+  assert.equal(after.vacations.find((v) => v.id === g.id).start, g.start);
+  const notes = service.call(lasha, 'listNotifications', {});
+  assert.ok((notes.items || notes).some((x) => /Gemma .* te pide tus días/.test(x.text)));
+  const req = service.call(lasha, 'getYear', { year: 2027 }).requests.find((x) => x.type === 'dias');
+  assert.ok(req);
+  // Lasha acepta: se intercambian las quincenas.
+  service.call(lasha, 'respondDays', { id: req.id, accept: true });
+  const fin = service.call(admin, 'getYear', { year: 2027 });
+  assert.equal(fin.vacations.find((v) => v.id === g.id).start, l.start);
+  assert.equal(fin.vacations.find((v) => v.id === l.id).start, g.start);
+  // Fechas en verano: no se puede.
+  err(() => service.call(gemma, 'moveMyVacation', { year: 2027, id: g.id, start: '2027-07-01', end: '2027-07-15' }));
+});

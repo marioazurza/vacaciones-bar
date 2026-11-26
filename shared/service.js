@@ -644,6 +644,83 @@ export function createService({ repo, hashPassword, verifyPassword, randomToken,
       return { ok: true, id: req.id };
     },
 
+    /**
+     * Un trabajador mueve una de sus quincenas. Si cabe sin romper reglas, se guarda.
+     * Si choca con la quincena de un compañero, no se cambia: al compañero le llega una
+     * petición de esos días; si la acepta, él pasa a las fechas antiguas del que pide.
+     */
+    moveMyVacation({ year, id, start, end }, user) {
+      year = Number(year);
+      const y = requireYear(year);
+      if (user.role === 'admin') throw new ApiError(400, 'El administrador mueve las vacaciones directamente.');
+      if (y.status !== 'publicado') throw new ApiError(400, 'El calendario de este año todavía no está publicado.');
+      const all = repo.all('vacations', { year });
+      const mine = all.find((v) => v.id === Number(id));
+      if (!mine || mine.worker_id !== user.worker_id) throw new ApiError(403, 'Solo puedes mover tus propias vacaciones.');
+      if (mine.start <= today() || start <= today()) throw new ApiError(400, 'Solo se pueden mover vacaciones que todavía no han empezado, a fechas futuras.');
+      checkVacationPeriod(start, end, year);
+      if (periodLength(start, end) !== periodLength(mine.start, mine.end)) throw new ApiError(400, 'La quincena tiene que seguir teniendo los mismos días.');
+      const moved = all.map((v) => (v.id === mine.id ? { ...v, start, end } : v));
+      const before = analyze(ctxFor(year)).issues;
+      const bad = newIssues(before, analyze(ctxFor(year, { vacations: moved })).issues);
+      const nameOf = nameOfFn();
+      if (!bad.length) {
+        repo.update('vacations', mine.id, { start, end });
+        notify(adminIds(), `${user.display} ha movido sus vacaciones: ${formatRange(mine.start, mine.end)} → ${formatRange(start, end)}.`, `year:${year}`);
+        log(user, year, 'Vacaciones movidas', `${user.display}: ${formatRange(mine.start, mine.end)} → ${formatRange(start, end)}.`);
+        return { ok: true, moved: true };
+      }
+      // ¿Con quién choca? Los compañeros de vacaciones en los días en conflicto.
+      const others = new Set();
+      for (const it of bad) for (const w of it.off || []) if (w !== user.worker_id) others.add(w);
+      const blockedHit = bad.some((i) => i.type === 'blocked');
+      if (blockedHit || others.size !== 1) {
+        const intro = blockedHit ? 'Esas fechas están bloqueadas' : others.size ? `Coincidirías con ${[...others].map(nameOf).join(' y ')}` : 'No se puede mover';
+        throw new ApiError(409, `${intro}: no se puede mover ahí.`, bad.slice(0, 6).map((i) => describeIssue(i, nameOf)));
+      }
+      const otherId = [...others][0];
+      const theirs = all.filter((v) => v.worker_id === otherId && v.start <= end && v.end >= start);
+      if (theirs.length !== 1) throw new ApiError(409, `Coincidirías con ${nameOf(otherId)}: no se puede mover ahí.`);
+      const other = theirs[0];
+      if (other.start <= today()) throw new ApiError(400, `Las vacaciones de ${nameOf(otherId)} ya han empezado.`);
+      // Se pide la quincena entera del compañero: si acepta, os intercambiáis las fechas.
+      const data = { a: { id: mine.id, start: mine.start, end: mine.end }, to: { start: other.start, end: other.end }, b: { id: other.id, start: other.start, end: other.end } };
+      // Si el compañero acepta, se queda con las fechas antiguas: tiene que cumplir las reglas.
+      guard(year, { vacations: applyDays(all, data) }, `Coincidirías con ${nameOf(otherId)} y tampoco se puede cambiar con él porque`);
+      const dup = repo.all('requests', { year, type: 'dias', status: 'esperando_companero' }).find((r) => r.requester_id === user.worker_id && r.data?.a?.id === mine.id);
+      if (dup) repo.update('requests', dup.id, { status: 'anulada', resolved_at: now() });
+      const req = repo.insert('requests', { year, type: 'dias', status: 'esperando_companero', requester_id: user.worker_id, target_id: otherId, data, comment: '', admin_comment: '', created_at: now(), resolved_at: null });
+      const u = userOfWorker(otherId);
+      if (u) notify([u.id], `${user.display} te pide tus días ${formatRange(other.start, other.end)}. Si aceptas, os cambiáis: tú pasas al ${formatRange(mine.start, mine.end)}.`, `request:${req.id}`);
+      log(user, year, 'Petición de días', `${user.display} pide a ${nameOf(otherId)} los días ${formatRange(other.start, other.end)}.`);
+      return { ok: true, moved: false, requested: nameOf(otherId), start: other.start, end: other.end };
+    },
+
+    respondDays({ id, accept }, user) {
+      const r = repo.get('requests', Number(id));
+      if (!r || r.type !== 'dias' || r.target_id !== user.worker_id) throw new ApiError(403, 'Esta petición no es para ti.');
+      if (r.status !== 'esperando_companero') throw new ApiError(400, 'Esta petición ya fue respondida.');
+      const requester = userOfWorker(r.requester_id);
+      if (!accept) {
+        repo.update('requests', r.id, { status: 'rechazada', admin_comment: `Rechazada por ${user.display}.`, resolved_at: now() });
+        if (requester) notify([requester.id], `${user.display} no te cede sus días ${formatRange(r.data.to.start, r.data.to.end)}.`, `request:${r.id}`);
+        log(user, r.year, 'Petición de días rechazada', `${user.display} no cede sus días.`);
+        return { ok: true };
+      }
+      const all = repo.all('vacations', { year: r.year });
+      const va = all.find((v) => v.id === r.data.a.id), vb = all.find((v) => v.id === r.data.b.id);
+      if (!va || !vb || va.start !== r.data.a.start || vb.start !== r.data.b.start) throw new ApiError(409, 'Las vacaciones han cambiado desde la petición. Ya no se puede aceptar.');
+      guard(r.year, { vacations: applyDays(all, r.data) }, 'Ya no se puede aceptar porque');
+      repo.update('vacations', va.id, { start: r.data.to.start, end: r.data.to.end });
+      repo.update('vacations', vb.id, { start: r.data.a.start, end: r.data.a.end });
+      repo.update('requests', r.id, { status: 'aprobada', admin_comment: `Aceptada por ${user.display}.`, resolved_at: now() });
+      const nameOf = nameOfFn();
+      if (requester) notify([requester.id], `${user.display} te ha cedido sus días: ahora tienes ${formatRange(r.data.to.start, r.data.to.end)}.`, `request:${r.id}`);
+      notify(adminIds(), `Cambio de días entre ${nameOf(r.requester_id)} (${formatRange(r.data.to.start, r.data.to.end)}) y ${user.display} (${formatRange(r.data.a.start, r.data.a.end)}).`, `year:${r.year}`);
+      log(user, r.year, 'Petición de días aceptada', `${nameOf(r.requester_id)} → ${formatRange(r.data.to.start, r.data.to.end)}; ${user.display} → ${formatRange(r.data.a.start, r.data.a.end)}.`);
+      return { ok: true };
+    },
+
     respondSwap({ id, accept }, user) {
       const r = repo.get('requests', Number(id));
       if (!r || r.type !== 'intercambio' || r.target_id !== user.worker_id) throw new ApiError(403, 'Esta propuesta no es para ti.');
@@ -725,6 +802,10 @@ export function createService({ repo, hashPassword, verifyPassword, randomToken,
   function applyChange(all, wid, data) {
     const removeIds = new Set(data.remove.map((r) => r.id));
     return [...all.filter((v) => !removeIds.has(v.id)), ...data.add.map((a, i) => ({ id: -1 - i, worker_id: wid, start: a.start, end: a.end }))];
+  }
+
+  function applyDays(all, data) {
+    return all.map((v) => (v.id === data.a.id ? { ...v, start: data.to.start, end: data.to.end } : v.id === data.b.id ? { ...v, start: data.a.start, end: data.a.end } : v));
   }
 
   function applySwap(all, data) {
