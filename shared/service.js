@@ -40,8 +40,9 @@ export const EXAMPLE_WORKERS = [
 
 // Vacaciones ya pedidas para el año que se planifica (mes-día).
 const BAR_REQUESTED = [
-  ['Naima', '01-01', '01-15', 'Pedido por Naima: enero'],
-  ['Naima', '01-16', '01-30', 'Pedido por Naima: enero'],
+  ['Naima', '03-01', '03-15', 'Pedido por Naima: marzo'],
+  ['Naima', '03-16', '03-30', 'Pedido por Naima: marzo'],
+  ['Josué', '01-01', '01-15', 'Pedido por Josué: primera quincena de enero'],
 ];
 
 // Plantilla real del bar.
@@ -174,7 +175,7 @@ export function createService({ repo, hashPassword, verifyPassword, randomToken,
             }
           }
           const fixed = repo.all('vacations', { year });
-          const prop = generateRotation(ctxFor(year), { periodLength: DEFAULT_PERIOD_RULES.periodLength, fixed });
+          const prop = generateRotation(ctxFor(year), { periodLength: DEFAULT_PERIOD_RULES.periodLength, fixed, aroundBlocked: true });
           if (prop.issues.length) continue;
           for (const v of prop.vacations) repo.insert('vacations', { ...v, year, note: 'Rotación por turnos', created_at: now() });
         }
@@ -497,6 +498,7 @@ export function createService({ repo, hashPassword, verifyPassword, randomToken,
       s.rotation = {
         start: isISODate(rot.start) ? rot.start : null,
         spread: !!rot.spread,
+        aroundBlocked: rot.aroundBlocked !== false && !rot.spread,
         order: Object.fromEntries(Object.entries(rot.order || {}).map(([k, v]) => [k, (v || []).map(Number).filter(Boolean)])),
       };
       setSetting('generator', s);

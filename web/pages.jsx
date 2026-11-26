@@ -349,8 +349,9 @@ export function GeneratorPage({ data, reload }) {
             </Field>
             <Field label={`Las ${Math.floor(30 / (data.periodRules?.periodLength || 15))} vueltas de cada turno`}>
               <div class="seg">
-                <button class={!s.rotation?.spread ? 'on' : ''} onClick={() => setS({ ...s, rotation: { ...s.rotation, spread: false } })}>Seguidas</button>
-                <button class={s.rotation?.spread ? 'on' : ''} onClick={() => setS({ ...s, rotation: { ...s.rotation, spread: true } })}>Repartidas en el año</button>
+                <button class={!s.rotation?.spread && s.rotation?.aroundBlocked !== false ? 'on' : ''} onClick={() => setS({ ...s, rotation: { ...s.rotation, spread: false, aroundBlocked: true } })}>Una antes y otra después del bloqueo</button>
+                <button class={!s.rotation?.spread && s.rotation?.aroundBlocked === false ? 'on' : ''} onClick={() => setS({ ...s, rotation: { ...s.rotation, spread: false, aroundBlocked: false } })}>Seguidas</button>
+                <button class={s.rotation?.spread ? 'on' : ''} onClick={() => setS({ ...s, rotation: { ...s.rotation, spread: true, aroundBlocked: false } })}>Repartidas en el año</button>
               </div>
             </Field>
           </div>

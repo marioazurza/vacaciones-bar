@@ -17,7 +17,7 @@ export const DEFAULT_GENERATOR_SETTINGS = {
   substitutes: { enabled: true, length: 14 }, // suplentes de cocina para un periodo seguido
   iterations: 40,
   strategy: 'rotacion', // 'rotacion' (uno detrás de otro en cada turno) | 'equilibrado'
-  rotation: { start: null, spread: false, order: {} },
+  rotation: { start: null, spread: false, aroundBlocked: true, order: {} },
 };
 
 function rng(seed) {
@@ -320,9 +320,29 @@ export function generateRotation(ctx, opts = {}) {
     mark(s, a, b);
     fixedDays.set(s.worker_id, (fixedDays.get(s.worker_id) || 0) + Math.min(N - 1, b) - Math.max(0, a) + 1);
   }
+  // Una quincena a cada lado del bloqueo (p. ej. una antes y otra después del verano):
+  // ventanas = tramos seguidos sin fechas bloqueadas; el periodo r de cada uno va en la
+  // ventana r que tenga libre (las que ya usan sus vacaciones fijas no cuentan).
+  const windows = [];
+  if (opts.aroundBlocked) {
+    for (let i = s0; i < N;) {
+      if (blocked[i]) { i++; continue; }
+      let j = i; while (j + 1 < N && !blocked[j + 1]) j++;
+      if (j - i + 1 >= L) windows.push([i, j]);
+      i = j + 1;
+    }
+    if (windows.length < 2) windows.length = 0;
+  }
+  const winOf = (a, b) => windows.findIndex(([x, y]) => a <= y && b >= x);
+  const usedWin = new Map();
+  for (const v of fixed) {
+    const w = winOf(dayIndex(v.start, year), dayIndex(v.end, year));
+    if (w >= 0) (usedWin.get(v.worker_id) || usedWin.set(v.worker_id, new Set()).get(v.worker_id)).add(w);
+  }
   const cross = (team, a) => { let c = 0; for (let i = a; i < a + L; i++) for (const t in teamOcc) if (t !== team && teamOcc[t][i]) { c++; break; } return c; };
   const hardFree = (p, a, m) => {
     if (a < s0 || a + L > N) return false;
+    if (m && m.win != null && (a < windows[m.win][0] || a + L - 1 > windows[m.win][1])) return false;
     for (let i = a; i < a + L; i++) {
       if (blocked[i] || p.occ[i]) return false;
       if (maxAll != null && m && shiftOcc[m.shift] && shiftOcc[m.shift][i] >= maxAll) return false;
@@ -342,6 +362,17 @@ export function generateRotation(ctx, opts = {}) {
     const left = new Map(ordered.map((m) => [m.worker_id, Math.floor(Math.max(0, (m.days ?? 30) - (fixedDays.get(m.worker_id) || 0)) / L)]));
     const queue = [];
     for (let r = 0; [...left.values()].some((n) => n > r); r++) for (const m of ordered) if (left.get(m.worker_id) > r) queue.push(m);
+    if (windows.length) {
+      // Cada uno, en sus ventanas libres por orden; la cola se ordena por ventana.
+      const seen = new Map();
+      for (let k = 0; k < queue.length; k++) {
+        const m = queue[k];
+        const free = windows.map((_, w) => w).filter((w) => !usedWin.get(m.worker_id)?.has(w));
+        const n = seen.get(m.worker_id) || 0; seen.set(m.worker_id, n + 1);
+        queue[k] = { ...m, win: free.length ? free[Math.min(n, free.length - 1)] : null };
+      }
+      queue.sort((x, y) => (x.win ?? 99) - (y.win ?? 99));
+    }
     return { pool: p, queue };
   }).sort((x, y) => y.queue.length - x.queue.length);
 

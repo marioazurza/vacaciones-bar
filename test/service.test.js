@@ -169,7 +169,7 @@ test('regla actual: 15 días seguidos y máximo 1 de vacaciones a la vez por tur
 test('rotación: en cada turno, uno detrás de otro sin huecos', () => {
   const { service, admin } = setup({ periodLength: 15, legacy: false });
   for (const spread of [false, true]) {
-    service.call(admin, 'saveGeneratorSettings', { settings: { strategy: 'rotacion', rotation: { start: '2027-01-04', spread } } });
+    service.call(admin, 'saveGeneratorSettings', { settings: { strategy: 'rotacion', rotation: { start: '2027-01-04', spread, aroundBlocked: false } } });
     const prop = service.call(admin, 'generate', { year: 2027 });
     assert.equal(prop.issues.length, 0);
     assert.deepEqual(prop.unassigned, {});
@@ -204,14 +204,22 @@ test('plantilla del bar: en sala nunca más de un camarero de vacaciones a la ve
     }
   }
   assert.equal(days.size, 7 * 30);
-  // Naima tiene todo enero (1–30) y nadie de sala coincide con ella.
+  // Naima tiene todo marzo (1–30) y Josué la primera quincena de enero.
   const naima = d.staff.find((s) => s.first_name === 'Naima');
-  assert.deepEqual(d.vacations.filter((v) => v.worker_id === naima.worker_id).map((v) => [v.start, v.end]).sort(), [['2027-01-01', '2027-01-15'], ['2027-01-16', '2027-01-30']]);
-  assert.ok(![...days.keys()].some((k) => k <= '2027-01-30'));
-  // Al volver a generar, lo pedido por Naima se mantiene.
+  const josue = d.staff.find((s) => s.first_name === 'Josué');
+  assert.deepEqual(d.vacations.filter((v) => v.worker_id === naima.worker_id).map((v) => [v.start, v.end]).sort(), [['2027-03-01', '2027-03-15'], ['2027-03-16', '2027-03-30']]);
+  assert.ok(d.vacations.some((v) => v.worker_id === josue.worker_id && v.start === '2027-01-01' && v.end === '2027-01-15'));
+  // El resto: una quincena antes del verano y otra después.
+  for (const s of d.staff) {
+    if (s.worker_id === naima.worker_id) continue;
+    const vs = d.vacations.filter((v) => v.worker_id === s.worker_id);
+    assert.equal(vs.filter((v) => v.end < '2027-06-01').length, 1, `${s.first_name} antes del verano`);
+    assert.equal(vs.filter((v) => v.start > '2027-09-09').length, 1, `${s.first_name} después del verano`);
+  }
+  // Al volver a generar, lo pedido se mantiene.
   const prop = service.call(admin, 'generate', { year: 2027 });
   assert.equal(prop.issues.length, 0);
-  assert.equal(prop.vacations.filter((v) => v.worker_id === naima.worker_id && v.start < '2027-02-01').length, 2);
+  assert.equal(prop.vacations.filter((v) => v.worker_id === naima.worker_id && v.start.startsWith('2027-03')).length, 2);
   // Nada entre el 1 de junio y el 9 de septiembre, y camareros y cocineros casi sin coincidir.
   for (const v of d.vacations) assert.ok(v.end < '2027-06-01' || v.start > '2027-09-09', `${v.start}–${v.end} en temporada alta`);
   assert.equal(d.vacations.length, 7 * 2 + 4 * 2);
