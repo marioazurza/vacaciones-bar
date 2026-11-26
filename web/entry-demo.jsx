@@ -6,7 +6,7 @@ import { createService, ApiError } from '../shared/service.js';
 import { createMemoryRepo } from '../shared/memrepo.js';
 import { start } from './main.jsx';
 
-const KEY = 'vacaciones-bar-demo-v9';
+const KEY = 'vacaciones-bar-demo-v10';
 const TOKEN = 'vacaciones-bar-demo-token-v4';
 // Si el navegador no deja guardar (ventana privada, visor incrustado...), se usa memoria:
 // todo funciona igual, pero los datos se pierden al cerrar la página.

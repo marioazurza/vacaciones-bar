@@ -218,7 +218,7 @@ function TimelineView({ cal, filters, from, n, title, wide, onDay, onBar, onPick
     items.push(<div class="g-group" style={{ gridRow: row++ }} key={`g${g.key}`}><span class="stick"><GroupDot team={g.team} shift={g.shift} /> {TEAMS[g.team]} <span class="muted" style="text-transform:none;font-weight:500">· {SHIFTS[g.shift].toLowerCase()} · {members.length} personas</span></span></div>);
     for (const s of members) {
       const r = row++;
-      items.push(<div class="g-name" style={{ gridRow: r, gridColumn: 1 }} key={`n${s.worker_id}`} title={s.name}><span class={`dot ${colorClass(s.team, s.shift)}`} />{tiny ? s.first_name.split(' ')[0] : s.name}</div>);
+      items.push(<div class="g-name" style={{ gridRow: r, gridColumn: 1 }} key={`n${s.worker_id}`} title={s.name}><span class={`dot ${colorClass(s.team, s.shift)}`} />{tiny ? s.first_name.split(' ')[0] : s.name}{s.flex && !tiny ? <span class="muted" style="font-weight:500"> · suplente</span> : null}</div>);
       days.forEach((date, d) => {
         const ok = inYear(date);
         const i = ok ? dayIndex(date, cal.year) : -1;

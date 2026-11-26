@@ -58,6 +58,8 @@ export const BAR_WORKERS = [
   ['Edar', 'Centeno González', 'sala', 'T'],
   ['Gerardo', 'Intriago Mero', 'sala', 'T'],
   ['Ayman', 'Rija', 'sala', 'T'],
+  // Suplente: cubre las vacaciones de los camareros; cuando él coge las suyas puede coincidir con cualquier cocinero.
+  ['Edwin', 'Báez Rivera', 'sala', 'T', true],
 ];
 
 const slug = (s) => s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, '');
@@ -158,9 +160,9 @@ export function createService({ repo, hashPassword, verifyPassword, randomToken,
       repo.insert('years', { year: thisYear, status: 'publicado', published_at: now() });
       repo.insert('years', { year: planYear, status: 'borrador', published_at: null });
       for (const y of [thisYear, planYear]) repo.insert('blocked', { year: y, start: `${y}-06-01`, end: `${y}-09-09`, reason: 'Temporada alta: no se cogen vacaciones' });
-      for (const [first, last, team, shift] of workers) {
+      for (const [first, last, team, shift, flex] of workers) {
         const w = repo.insert('workers', { first_name: first, last_name: last, created_at: now() });
-        for (const year of [thisYear, planYear]) repo.insert('staff', { year, worker_id: w.id, team, shift, days: DEFAULT_ANNUAL_DAYS });
+        for (const year of [thisYear, planYear]) repo.insert('staff', { year, worker_id: w.id, team, shift, days: DEFAULT_ANNUAL_DAYS, flex: flex ? 1 : 0 });
         repo.insert('users', { username: slug(first.split(' ')[0]), password_hash: hashPassword(workerPassword), role: 'worker', worker_id: w.id, created_at: now() });
       }
       if (withDemoPlan) {
@@ -290,7 +292,7 @@ export function createService({ repo, hashPassword, verifyPassword, randomToken,
       repo.insert('years', { year, status: 'borrador', published_at: null });
       const from = Number(copyFrom) || Math.max(0, ...repo.all('years').map((y) => y.year).filter((y) => y < year));
       const src = from ? repo.all('staff', { year: from }) : [];
-      for (const s of src) repo.insert('staff', { year, worker_id: s.worker_id, team: s.team, shift: s.shift, days: s.days });
+      for (const s of src) repo.insert('staff', { year, worker_id: s.worker_id, team: s.team, shift: s.shift, days: s.days, flex: s.flex ? 1 : 0 });
       // Las fechas bloqueadas (p. ej. temporada alta) se repiten cada año.
       if (from) for (const b of repo.all('blocked', { year: from })) {
         const mv = (d) => `${year}${d.slice(4)}`;
@@ -329,6 +331,7 @@ export function createService({ repo, hashPassword, verifyPassword, randomToken,
       if (!first) throw new ApiError(400, 'El nombre es obligatorio.');
       if (!TEAMS[p.team] || !SHIFTS[p.shift]) throw new ApiError(400, 'Puesto o turno no válido.');
       const days = Math.floor(Number(p.days ?? DEFAULT_ANNUAL_DAYS));
+      const flex = !!p.flex;
       if (!(days >= 0 && days <= 60)) throw new ApiError(400, 'Los días de vacaciones deben estar entre 0 y 60.');
       const username = String(p.username || slug(first)).trim().toLowerCase();
       if (!/^[a-z0-9._-]{2,30}$/.test(username)) throw new ApiError(400, 'El usuario solo puede tener letras sin acentos, números, punto o guion.');
@@ -341,12 +344,12 @@ export function createService({ repo, hashPassword, verifyPassword, randomToken,
         const u = userOfWorker(workerId);
         if (clash && clash.id !== u?.id) throw new ApiError(400, `El usuario "${username}" ya existe.`);
         const st = repo.all('staff', { year, worker_id: workerId })[0];
-        if (st && (st.team !== p.team || st.shift !== p.shift || st.days !== days)) {
-          const staff = repo.all('staff', { year }).map((s) => (s.id === st.id ? { ...s, team: p.team, shift: p.shift, days } : s));
+        if (st && (st.team !== p.team || st.shift !== p.shift || st.days !== days || !!st.flex !== flex)) {
+          const staff = repo.all('staff', { year }).map((s) => (s.id === st.id ? { ...s, team: p.team, shift: p.shift, days, flex: flex ? 1 : 0 } : s));
           guard(year, { staff }, `No se puede cambiar el puesto o los días de ${workerName(w)} porque`);
-          repo.update('staff', st.id, { team: p.team, shift: p.shift, days });
+          repo.update('staff', st.id, { team: p.team, shift: p.shift, days, flex: flex ? 1 : 0 });
         } else if (!st) {
-          repo.insert('staff', { year, worker_id: workerId, team: p.team, shift: p.shift, days });
+          repo.insert('staff', { year, worker_id: workerId, team: p.team, shift: p.shift, days, flex: flex ? 1 : 0 });
         }
         repo.update('workers', workerId, { first_name: first, last_name: last });
         if (u) {
@@ -359,7 +362,7 @@ export function createService({ repo, hashPassword, verifyPassword, randomToken,
         if (clash) throw new ApiError(400, `El usuario "${username}" ya existe.`);
         const w = repo.insert('workers', { first_name: first, last_name: last, created_at: now() });
         workerId = w.id;
-        repo.insert('staff', { year, worker_id: workerId, team: p.team, shift: p.shift, days });
+        repo.insert('staff', { year, worker_id: workerId, team: p.team, shift: p.shift, days, flex: flex ? 1 : 0 });
         repo.insert('users', { username, password_hash: hashPassword(String(p.password || '1234')), role: 'worker', worker_id: workerId, created_at: now() });
         log(user, year, 'Trabajador creado', `${first} ${last} · ${groupLabel(p.team, p.shift)} · usuario ${username}.`);
       }

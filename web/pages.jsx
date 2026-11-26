@@ -246,7 +246,7 @@ export function TeamPage({ data, reload, onYear }) {
                 const st = workerStats(s, data.vacations, data.today);
                 return (
                   <tr key={s.worker_id}>
-                    <td><b>{s.name}</b></td>
+                    <td><b>{s.name}</b>{s.flex ? <span class="badge" style="margin-left:6px">Suplente</span> : null}</td>
                     <td class="hide-mobile muted">{s.username}</td>
                     <td>{s.days}</td>
                     <td><span class={`badge ${st.assigned === s.days ? 'ok' : st.assigned > s.days ? 'bad' : 'warn'}`}>{st.assigned} / {s.days}</span></td>
@@ -269,7 +269,7 @@ function WorkerModal({ data, initial, onClose, onDone }) {
   const [f, setF] = useState({ first_name: '', last_name: '', username: '', password: '', ...initial });
   const set = (k) => (e) => setF({ ...f, [k]: e.currentTarget.value });
   const save = async () => {
-    const ok = await run(() => api('saveWorker', { id: initial.worker_id, year: data.year, first_name: f.first_name, last_name: f.last_name, team: f.team, shift: f.shift, days: Number(f.days), username: f.username, password: f.password }), 'Trabajador guardado');
+    const ok = await run(() => api('saveWorker', { id: initial.worker_id, year: data.year, first_name: f.first_name, last_name: f.last_name, team: f.team, shift: f.shift, days: Number(f.days), flex: !!f.flex, username: f.username, password: f.password }), 'Trabajador guardado');
     if (ok) { onDone(); onClose(); }
   };
   return (
@@ -284,6 +284,7 @@ function WorkerModal({ data, initial, onClose, onDone }) {
         <Field label="Usuario para entrar"><input class="input" value={f.username} onInput={set('username')} placeholder="se genera con el nombre" /></Field>
         <Field label={initial.worker_id ? 'Nueva contraseña (opcional)' : 'Contraseña (por defecto 1234)'}><input class="input" type="text" value={f.password} onInput={set('password')} /></Field>
       </div>
+      <label class="row" style="gap:8px;margin:4px 0"><input type="checkbox" checked={!!f.flex} onChange={(e) => setF({ ...f, flex: e.currentTarget.checked })} /> Suplente: cubre los dos turnos y sus vacaciones pueden coincidir con las de cualquier cocinero</label>
       <div class="small muted">Si cambias el puesto, el turno o los días, se comprueba que el calendario siga cumpliendo la cobertura mínima.</div>
     </Modal>
   );

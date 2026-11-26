@@ -312,7 +312,7 @@ export function generateRotation(ctx, opts = {}) {
   // Máximo por turno con cocina y sala juntas: días ocupados por turno.
   const maxAll = ctx.maxOffPerShiftAll == null || ctx.maxOffPerShiftAll === '' ? null : Number(ctx.maxOffPerShiftAll);
   const shiftOcc = { M: new Array(N).fill(0), T: new Array(N).fill(0) };
-  const mark = (s, a, b) => { const p = pools[poolKeyOf(s)]; for (let i = Math.max(0, a); i <= Math.min(N - 1, b); i++) { p.occ[i] = 1; teamOcc[s.team][i] = 1; if (shiftOcc[s.shift]) shiftOcc[s.shift][i]++; } };
+  const mark = (s, a, b) => { const p = pools[poolKeyOf(s)]; for (let i = Math.max(0, a); i <= Math.min(N - 1, b); i++) { p.occ[i] = 1; teamOcc[s.team][i] = 1; if (shiftOcc[s.shift] && !s.flex) shiftOcc[s.shift][i]++; } };
   for (const v of fixed) {
     const s = byId.get(v.worker_id);
     if (!s) continue;
@@ -345,7 +345,7 @@ export function generateRotation(ctx, opts = {}) {
     if (m && m.win != null && (a < windows[m.win][0] || a + L - 1 > windows[m.win][1])) return false;
     for (let i = a; i < a + L; i++) {
       if (blocked[i] || p.occ[i]) return false;
-      if (maxAll != null && m && shiftOcc[m.shift] && shiftOcc[m.shift][i] >= maxAll) return false;
+      if (maxAll != null && m && !m.flex && shiftOcc[m.shift] && shiftOcc[m.shift][i] >= maxAll) return false;
     }
     return true;
   };
@@ -370,6 +370,19 @@ export function generateRotation(ctx, opts = {}) {
         const free = windows.map((_, w) => w).filter((w) => !usedWin.get(m.worker_id)?.has(w));
         const n = seen.get(m.worker_id) || 0; seen.set(m.worker_id, n + 1);
         queue[k] = { ...m, win: free.length ? free[Math.min(n, free.length - 1)] : null };
+      }
+      // Si en una ventana no caben todos (p. ej. después del verano hay 113 días y 8 camareros),
+      // pasa a otra con sitio a quien pueda ir en ambas, empezando por el suplente.
+      const cap = windows.map(([x, y]) => { let f = 0; for (let i = Math.max(x, s0); i <= y; i++) if (!p.occ[i]) f++; return Math.floor(f / L); });
+      const count = (w) => queue.filter((q) => q.win === w).length;
+      for (let w = 0; w < windows.length; w++) {
+        while (count(w) > cap[w]) {
+          const to = windows.findIndex((_, t) => t !== w && count(t) < cap[t]);
+          if (to < 0) break;
+          const cands = queue.filter((q) => q.win === w);
+          const pick = cands.find((q) => q.flex) || cands[cands.length - 1];
+          pick.win = to;
+        }
       }
       queue.sort((x, y) => (x.win ?? 99) - (y.win ?? 99));
     }

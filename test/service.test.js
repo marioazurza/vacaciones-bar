@@ -191,7 +191,7 @@ test('plantilla del bar: en sala nunca más de un camarero de vacaciones a la ve
   service.seed({ workers: BAR_WORKERS });
   const admin = service.call(null, 'login', { username: 'admin', password: 'admin' }).token;
   const d = service.call(admin, 'getYear', { year: 2027 });
-  assert.equal(d.staff.length, 11);
+  assert.equal(d.staff.length, 12);
   assert.deepEqual(d.periodRules.wholeTeam, ['sala', 'cocina']);
   const sala = new Set(d.staff.filter((s) => s.team === 'sala').map((s) => s.worker_id));
   const days = new Map();
@@ -203,7 +203,7 @@ test('plantilla del bar: en sala nunca más de un camarero de vacaciones a la ve
       days.set(k, v.worker_id);
     }
   }
-  assert.equal(days.size, 7 * 30);
+  assert.equal(days.size, 8 * 30);
   // Naima tiene todo marzo (1–30) y Josué la primera quincena de enero.
   const naima = d.staff.find((s) => s.first_name === 'Naima');
   const josue = d.staff.find((s) => s.first_name === 'Josué');
@@ -211,7 +211,7 @@ test('plantilla del bar: en sala nunca más de un camarero de vacaciones a la ve
   assert.ok(d.vacations.some((v) => v.worker_id === josue.worker_id && v.start === '2027-01-01' && v.end === '2027-01-15'));
   // El resto: una quincena antes del verano y otra después.
   for (const s of d.staff) {
-    if (s.worker_id === naima.worker_id) continue;
+    if (s.worker_id === naima.worker_id || s.flex) continue;
     const vs = d.vacations.filter((v) => v.worker_id === s.worker_id);
     assert.equal(vs.filter((v) => v.end < '2027-06-01').length, 1, `${s.first_name} antes del verano`);
     assert.equal(vs.filter((v) => v.start > '2027-09-09').length, 1, `${s.first_name} después del verano`);
@@ -222,17 +222,22 @@ test('plantilla del bar: en sala nunca más de un camarero de vacaciones a la ve
   assert.equal(prop.vacations.filter((v) => v.worker_id === naima.worker_id && v.start.startsWith('2027-03')).length, 2);
   // Nada entre el 1 de junio y el 9 de septiembre, y camareros y cocineros casi sin coincidir.
   for (const v of d.vacations) assert.ok(v.end < '2027-06-01' || v.start > '2027-09-09', `${v.start}–${v.end} en temporada alta`);
-  assert.equal(d.vacations.length, 7 * 2 + 4 * 2);
+  assert.equal(d.vacations.length, 8 * 2 + 4 * 2);
   // Nunca dos cocineros a la vez, y un cocinero solo coincide con un camarero del otro turno.
   const shiftOf = new Map(d.staff.map((s) => [s.worker_id, s.shift]));
+  const flexOf = new Map(d.staff.map((s) => [s.worker_id, !!s.flex]));
   const cook = new Map();
   for (const v of d.vacations) if (!sala.has(v.worker_id)) for (let x = new Date(v.start); x <= new Date(v.end); x.setUTCDate(x.getUTCDate() + 1)) {
     const k = x.toISOString().slice(0, 10);
     assert.ok(!cook.has(k), `dos cocineros de vacaciones el ${k}`);
     cook.set(k, v.worker_id);
-    if (days.has(k)) assert.notEqual(shiftOf.get(days.get(k)), shiftOf.get(v.worker_id), `cocinero y camarero del mismo turno el ${k}`);
+    if (days.has(k) && !flexOf.get(days.get(k))) assert.notEqual(shiftOf.get(days.get(k)), shiftOf.get(v.worker_id), `cocinero y camarero del mismo turno el ${k}`);
   }
   assert.equal(cook.size, 4 * 30);
+  // Edwin (suplente) nunca coincide con otro camarero, y sí puede con cualquier cocinero.
+  const edwin = d.staff.find((s) => s.first_name === 'Edwin');
+  assert.ok(edwin.flex);
+  assert.equal([...days.values()].filter((id) => id === edwin.worker_id).length, 30);
   // Un camarero de mañana y otro de tarde a la vez: se rechaza.
   const m = d.staff.find((s) => s.team === 'sala' && s.shift === 'M');
   const t = d.staff.find((s) => s.team === 'sala' && s.shift === 'T');

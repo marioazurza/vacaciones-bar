@@ -172,15 +172,18 @@ export function analyze(ctx) {
   // de mañana no pueden estar de vacaciones a la vez; con uno de tarde sí).
   const maxAll = ctx.maxOffPerShiftAll == null || ctx.maxOffPerShiftAll === '' ? null : Number(ctx.maxOffPerShiftAll);
   if (maxAll != null) {
+    const flexIds = new Set((ctx.staff || []).filter((s) => s.flex).map((s) => s.worker_id));
+    const teamOfId = new Map((ctx.staff || []).map((s) => [s.worker_id, s.team]));
     for (const shift of Object.keys(SHIFTS)) {
       const gs = Object.values(groups).filter((g) => g.shift === shift);
       if (!gs.length) continue;
       for (let i = 0; i < N; i++) {
-        const off = [...new Set(gs.flatMap((g) => g.off[i]))];
+        // El suplente (flex) no tiene turno fijo: puede coincidir con cualquier cocinero.
+        const off = [...new Set(gs.flatMap((g) => g.off[i]))].filter((id) => !flexIds.has(id));
         const extra = gs.reduce((a, g) => a + g.extra[i], 0);
         if (off.length > maxAll + extra) {
           // Si todos son del mismo equipo, ya lo avisa la regla del equipo: no se repite.
-          const teams = new Set(gs.filter((g) => g.off[i].length).map((g) => g.team));
+          const teams = new Set(off.map((id) => teamOfId.get(id)));
           if (!(teams.size === 1 && wholeTeams.has([...teams][0]))) issues.push({ type: 'shiftall', date: dateFromIndex(year, i), shift, max: maxAll + extra, count: off.length, off });
           for (const g of gs) { g.problem[i] = g.problem[i] || 1; }
         }

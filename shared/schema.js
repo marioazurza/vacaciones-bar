@@ -6,7 +6,7 @@ export const SCHEMA = {
   sessions: ['token', 'user_id', 'created_at'],
   workers: ['first_name', 'last_name', 'created_at'],
   years: ['year', 'status', 'published_at'],
-  staff: ['year', 'worker_id', 'team', 'shift', 'days'],
+  staff: ['year', 'worker_id', 'team', 'shift', 'days', 'flex'],
   vacations: ['year', 'worker_id', 'start', 'end', 'note', 'created_at'],
   blocked: ['year', 'start', 'end', 'reason'],
   reinforcements: ['team', 'shift', 'start', 'end', 'count', 'note'],
@@ -19,4 +19,4 @@ export const SCHEMA = {
 
 export const JSON_COLUMNS = { requests: ['data'], settings: ['value'] };
 
-export const INTEGER_COLUMNS = new Set(['worker_id', 'year', 'days', 'count', 'user_id', 'requester_id', 'target_id', 'read']);
+export const INTEGER_COLUMNS = new Set(['worker_id', 'year', 'days', 'flex', 'count', 'user_id', 'requester_id', 'target_id', 'read']);
