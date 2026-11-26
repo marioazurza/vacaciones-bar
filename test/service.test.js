@@ -15,7 +15,7 @@ function setup({ periodLength = 0, legacy = true } = {}) {
     today: () => '2026-11-24',
   });
   service.seed({ withDemoPlan: false, workers: EXAMPLE_WORKERS });
-  service.call(service.call(null, 'login', { username: 'admin', password: 'admin' }).token, 'savePeriodRules', { wholeTeam: [] });
+  service.call(service.call(null, 'login', { username: 'admin', password: 'admin' }).token, 'savePeriodRules', { wholeTeam: [], maxOffPerShiftAll: null });
   const login = (u, p) => service.call(null, 'login', { username: u, password: p }).token;
   const admin = login('admin', 'admin');
   service.call(admin, 'savePeriodRules', { periodLength });
@@ -192,7 +192,7 @@ test('plantilla del bar: en sala nunca más de un camarero de vacaciones a la ve
   const admin = service.call(null, 'login', { username: 'admin', password: 'admin' }).token;
   const d = service.call(admin, 'getYear', { year: 2027 });
   assert.equal(d.staff.length, 11);
-  assert.deepEqual(d.periodRules.wholeTeam, ['sala']);
+  assert.deepEqual(d.periodRules.wholeTeam, ['sala', 'cocina']);
   const sala = new Set(d.staff.filter((s) => s.team === 'sala').map((s) => s.worker_id));
   const days = new Map();
   for (const v of d.vacations) {
@@ -215,16 +215,28 @@ test('plantilla del bar: en sala nunca más de un camarero de vacaciones a la ve
   // Nada entre el 1 de junio y el 9 de septiembre, y camareros y cocineros casi sin coincidir.
   for (const v of d.vacations) assert.ok(v.end < '2027-06-01' || v.start > '2027-09-09', `${v.start}–${v.end} en temporada alta`);
   assert.equal(d.vacations.length, 7 * 2 + 4 * 2);
-  const cook = new Set();
-  for (const v of d.vacations) if (!sala.has(v.worker_id)) for (let x = new Date(v.start); x <= new Date(v.end); x.setUTCDate(x.getUTCDate() + 1)) cook.add(x.toISOString().slice(0, 10));
-  assert.ok([...cook].filter((k) => days.has(k)).length <= 7);
+  // Nunca dos cocineros a la vez, y un cocinero solo coincide con un camarero del otro turno.
+  const shiftOf = new Map(d.staff.map((s) => [s.worker_id, s.shift]));
+  const cook = new Map();
+  for (const v of d.vacations) if (!sala.has(v.worker_id)) for (let x = new Date(v.start); x <= new Date(v.end); x.setUTCDate(x.getUTCDate() + 1)) {
+    const k = x.toISOString().slice(0, 10);
+    assert.ok(!cook.has(k), `dos cocineros de vacaciones el ${k}`);
+    cook.set(k, v.worker_id);
+    if (days.has(k)) assert.notEqual(shiftOf.get(days.get(k)), shiftOf.get(v.worker_id), `cocinero y camarero del mismo turno el ${k}`);
+  }
+  assert.equal(cook.size, 4 * 30);
   // Un camarero de mañana y otro de tarde a la vez: se rechaza.
   const m = d.staff.find((s) => s.team === 'sala' && s.shift === 'M');
   const t = d.staff.find((s) => s.team === 'sala' && s.shift === 'T');
   service.call(admin, 'clearVacations', { year: 2027 });
   service.call(admin, 'saveVacation', { year: 2027, worker_id: m.worker_id, start: '2027-12-01', end: '2027-12-15' });
   err(() => service.call(admin, 'saveVacation', { year: 2027, worker_id: t.worker_id, start: '2027-12-10', end: '2027-12-24' }));
-  // Con un cocinero sí puede coincidir.
-  const c = d.staff.find((s) => s.team === 'cocina');
-  service.call(admin, 'saveVacation', { year: 2027, worker_id: c.worker_id, start: '2027-12-01', end: '2027-12-15' });
+  // Con un cocinero del otro turno sí puede coincidir; con uno del mismo turno, no.
+  const ct = d.staff.find((s) => s.team === 'cocina' && s.shift === 'T');
+  const cm = d.staff.find((s) => s.team === 'cocina' && s.shift === 'M');
+  err(() => service.call(admin, 'saveVacation', { year: 2027, worker_id: cm.worker_id, start: '2027-12-01', end: '2027-12-15' }));
+  service.call(admin, 'saveVacation', { year: 2027, worker_id: ct.worker_id, start: '2027-12-01', end: '2027-12-15' });
+  // Y dos cocineros nunca a la vez.
+  const ct2 = d.staff.find((s) => s.team === 'cocina' && s.shift === 'T' && s.worker_id !== ct.worker_id);
+  err(() => service.call(admin, 'saveVacation', { year: 2027, worker_id: ct2.worker_id, start: '2027-12-05', end: '2027-12-19' }));
 });

@@ -28,6 +28,12 @@ export function CalendarPage({ data, reload, isAdmin, me }) {
   const nameOf = nameFn(data);
   const issues = cal.analysis.issues;
   const goMonth = (mm) => { setM(mm); setView('month'); };
+  // Arrastrar una barra: mueve el periodo entero los días indicados.
+  const moveBar = async (v, d) => {
+    const start = addDays(v.start, d), end = addDays(v.end, d);
+    const ok = await run(() => api('saveVacation', { id: v.id, year: data.year, worker_id: v.worker_id, start, end }), `${nameOf(v.worker_id)}: ${formatRange(start, end)}`);
+    if (ok) reload();
+  };
 
   return (
     <>
@@ -50,10 +56,10 @@ export function CalendarPage({ data, reload, isAdmin, me }) {
       </div>
       {view === 'year' && <YearView cal={cal} filters={filters} onDay={setDay} onMonth={goMonth} />}
       {view === 'month' && <MonthView cal={cal} filters={filters} month={m} onMonth={setM} onDay={setDay}
-        onBar={isAdmin ? (v) => setEdit(v) : null}
+        onBar={isAdmin ? (v) => setEdit(v) : null} onMove={isAdmin ? moveBar : null}
         onPick={isAdmin ? (worker_id, start, end) => setEdit({ worker_id, start, end }) : null} fixedLength={data.periodRules?.periodLength || 0} />}
       {view === 'week' && <WeekView cal={cal} filters={filters} start={wk} onDay={setDay}
-        onBar={isAdmin ? (v) => setEdit(v) : null}
+        onBar={isAdmin ? (v) => setEdit(v) : null} onMove={isAdmin ? moveBar : null}
         onPick={isAdmin ? (worker_id, start, end) => setEdit({ worker_id, start, end }) : null} fixedLength={data.periodRules?.periodLength || 0} />}
       {day && <DayModal cal={cal} date={day} onClose={() => setDay(null)} canEdit={isAdmin} onAdd={(d) => { setDay(null); setEdit({ start: d, end: d }); }} />}
       {edit && <VacationModal data={data} initial={edit} onClose={() => setEdit(null)} onDone={reload} />}

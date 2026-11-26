@@ -342,3 +342,7 @@ table.table { width: 100%; border-collapse: collapse; }
 .gantt-wrap.snap { scroll-snap-type: x mandatory; -webkit-overflow-scrolling: touch; overscroll-behavior-x: contain; scrollbar-width: none; }
 .gantt-wrap.snap::-webkit-scrollbar { display: none; }
 .gantt-wrap.snap .g-head.mstart { scroll-snap-align: start; scroll-snap-stop: always; }
+
+/* Arrastrar barras */
+.g-bar.drag { cursor: grab; touch-action: pan-x pan-y; -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
+.g-bar.dragging { cursor: grabbing; z-index: 6; opacity: .92; box-shadow: 0 6px 18px rgba(0,0,0,.28); outline: 2px solid #fff; transition: none; }

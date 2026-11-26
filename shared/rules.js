@@ -168,6 +168,26 @@ export function analyze(ctx) {
     }
   }
 
+  // Máximo por turno contando cocina y sala juntas (p. ej. un cocinero de mañana y un camarero
+  // de mañana no pueden estar de vacaciones a la vez; con uno de tarde sí).
+  const maxAll = ctx.maxOffPerShiftAll == null || ctx.maxOffPerShiftAll === '' ? null : Number(ctx.maxOffPerShiftAll);
+  if (maxAll != null) {
+    for (const shift of Object.keys(SHIFTS)) {
+      const gs = Object.values(groups).filter((g) => g.shift === shift);
+      if (!gs.length) continue;
+      for (let i = 0; i < N; i++) {
+        const off = [...new Set(gs.flatMap((g) => g.off[i]))];
+        const extra = gs.reduce((a, g) => a + g.extra[i], 0);
+        if (off.length > maxAll + extra) {
+          // Si todos son del mismo equipo, ya lo avisa la regla del equipo: no se repite.
+          const teams = new Set(gs.filter((g) => g.off[i].length).map((g) => g.team));
+          if (!(teams.size === 1 && wholeTeams.has([...teams][0]))) issues.push({ type: 'shiftall', date: dateFromIndex(year, i), shift, max: maxAll + extra, count: off.length, off });
+          for (const g of gs) { g.problem[i] = g.problem[i] || 1; }
+        }
+      }
+    }
+  }
+
   return { year, N, groups, issues, perWorker, blockedDay, minimums };
 }
 
@@ -185,6 +205,7 @@ function issueKey(it) {
   switch (it.type) {
     case 'coverage': return `c|${it.date}|${it.team}|${it.shift}`;
     case 'shiftmax': return `m|${it.date}|${it.team}|${it.shift}`;
+    case 'shiftall': return `a|${it.date}|${it.shift}`;
     case 'blocked': return `b|${it.date}|${it.worker_id}`;
     case 'overlap': return `o|${it.worker_id}|${it.a.start}|${it.b.start}`;
     case 'overlimit': return `l|${it.worker_id}`;
@@ -194,7 +215,7 @@ function issueKey(it) {
 
 function issueSeverity(it) {
   if (it.type === 'coverage') return it.deficit;
-  if (it.type === 'shiftmax') return it.count;
+  if (it.type === 'shiftmax' || it.type === 'shiftall') return it.count;
   if (it.type === 'overlimit') return it.assigned;
   return 1;
 }
@@ -235,6 +256,8 @@ export function describeIssue(it, nameOf = (id) => `#${id}`) {
     }
     case 'shiftmax':
       return `${formatDate(it.date, { weekday: true })} · ${it.shift ? groupLabel(it.team, it.shift) : TEAMS[it.team]}: no puede haber más de ${it.max} persona${it.max === 1 ? '' : 's'} de vacaciones a la vez ${it.shift ? 'en el turno' : `en ${it.team === 'sala' ? 'sala (mañana y tarde juntas)' : 'el equipo'}`} y habría ${it.count} (${it.off.map(nameOf).join(', ')}).`;
+    case 'shiftall':
+      return `${formatDate(it.date, { weekday: true })} · turno de ${SHIFTS[it.shift].toLowerCase()}: no puede haber más de ${it.max} persona${it.max === 1 ? '' : 's'} de vacaciones a la vez en el turno (cocina y sala juntas) y habría ${it.count} (${it.off.map(nameOf).join(', ')}).`;
     case 'blocked':
       return `${formatDate(it.date, { weekday: true })} es una fecha bloqueada${it.reason ? ` (${it.reason})` : ''} y ${nameOf(it.worker_id)} tendría vacaciones.`;
     case 'overlap':

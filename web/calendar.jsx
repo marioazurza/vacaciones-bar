@@ -97,7 +97,83 @@ export function YearView({ cal, filters, onDay, onMonth }) {
 // ---------- Línea de tiempo (filas por trabajador, barras continuas) ----------
 // La usan la vista mensual y la semanal: cada periodo de vacaciones es una sola barra
 // que ocupa todos sus días.
-function TimelineView({ cal, filters, from, n, title, wide, onDay, onBar, onPick, previewIds, fixedLength = 0, wrapRef, onScroll, months, fit }) {
+/**
+ * Barra de vacaciones que se puede arrastrar para moverla de fecha.
+ * Ratón: se arrastra directamente. Móvil: mantener pulsado un momento y luego arrastrar
+ * (así deslizar sobre el calendario sigue moviendo los meses).
+ */
+function DragBar({ v, cls, style, title, label, onClick, onMove, days }) {
+  const ref = useRef(null);
+  const st = useRef(null);
+  const [drag, setDrag] = useState(null); // { dx, delta }
+  const dayW = () => { const el = ref.current; return el ? el.getBoundingClientRect().width / Math.max(1, days) : 30; };
+  const update = (x) => {
+    const S = st.current; if (!S) return;
+    const dx = x - S.x0; const w = S.w;
+    const delta = Math.round(dx / w);
+    setDrag({ dx: delta * w, delta });
+  };
+  const finishRef = useRef(null);
+  const finish = (cancel) => {
+    const S = st.current; st.current = null;
+    if (S?.timer) clearTimeout(S.timer);
+    if (!S || !S.active) { setDrag(null); return false; }
+    const d = drag?.delta || 0;
+    setDrag(null);
+    ref.current?.classList.remove('dragging');
+    if (!cancel && d) onMove(v, d);
+    return true;
+  };
+  finishRef.current = finish;
+  useEffect(() => {
+    const el = ref.current; if (!el || !onMove) return;
+    const tm = (e) => {
+      const S = st.current; if (!S) return;
+      const t = e.touches[0];
+      if (!S.active) {
+        if (Math.abs(t.clientX - S.x0) > 8 || Math.abs(t.clientY - S.y0) > 8) { clearTimeout(S.timer); st.current = null; }
+        return;
+      }
+      e.preventDefault();
+      update(t.clientX);
+    };
+    el.addEventListener('touchmove', tm, { passive: false });
+    return () => el.removeEventListener('touchmove', tm);
+  });
+  if (!onMove) return <div ref={ref} class={cls} style={style} title={title} onClick={onClick}>{label}</div>;
+  const moved = drag && drag.delta;
+  const preview = moved ? `${formatRange(addDays(v.start, drag.delta), addDays(v.end, drag.delta))}` : null;
+  return (
+    <div ref={ref} class={`${cls} drag ${drag ? 'dragging' : ''}`} title={title}
+      style={{ ...style, transform: drag ? `translateX(${drag.dx}px)` : undefined }}
+      onMouseDown={(e) => {
+        if (e.button !== 0) return;
+        e.preventDefault();
+        st.current = { x0: e.clientX, y0: e.clientY, w: dayW(), active: false };
+        const mm = (ev) => {
+          const S = st.current; if (!S) return;
+          if (!S.active && Math.abs(ev.clientX - S.x0) < 4) return;
+          S.active = true; S.dragged = true; update(ev.clientX);
+        };
+        const mu = () => { window.removeEventListener('mousemove', mm); window.removeEventListener('mouseup', mu); const S = st.current; if (S && !S.active) { st.current = null; onClick?.(e); return; } finishRef.current(false); };
+        window.addEventListener('mousemove', mm); window.addEventListener('mouseup', mu);
+      }}
+      onTouchStart={(e) => {
+        const t = e.touches[0];
+        const S = { x0: t.clientX, y0: t.clientY, w: dayW(), active: false };
+        S.timer = setTimeout(() => { S.active = true; navigator.vibrate?.(15); setDrag({ dx: 0, delta: 0 }); }, 350);
+        st.current = S;
+      }}
+      onTouchEnd={(e) => { const S = st.current; if (S && !S.active) { clearTimeout(S.timer); st.current = null; e.preventDefault(); onClick?.(e); return; } if (S) { e.preventDefault(); finishRef.current(false); } }}
+      onTouchCancel={() => finishRef.current(true)}
+      onContextMenu={(e) => { if (st.current?.active || drag) e.preventDefault(); }}
+      onClick={(e) => e.stopPropagation()}>
+      {preview ? <span class="stick-bar">↔ {preview}</span> : label}
+    </div>
+  );
+}
+
+function TimelineView({ cal, filters, from, n, title, wide, onDay, onBar, onPick, onMove, previewIds, fixedLength = 0, wrapRef, onScroll, months, fit }) {
   const [sel, setSel] = useState(null);
   const last = addDays(from, n - 1);
   const yStart = `${cal.year}-01-01`, yEnd = `${cal.year}-12-31`;
@@ -123,9 +199,11 @@ function TimelineView({ cal, filters, from, n, title, wide, onDay, onBar, onPick
     );
   });
 
-  const bar = (key, r, a, b, cls, label, tip, onClick) => {
+  const bar = (key, r, a, b, cls, label, tip, onClick, v) => {
     const aa = a < from ? from : a, bb = b > last ? last : b;
-    items.push(<div key={key} class={cls} style={{ gridRow: r, gridColumn: `${col(aa)} / ${col(bb) + 1}` }} title={tip} onClick={onClick}>{label}</div>);
+    const style = { gridRow: r, gridColumn: `${col(aa)} / ${col(bb) + 1}` };
+    if (v && onMove) { items.push(<DragBar key={key} v={v} cls={cls} style={style} title={`${tip} · Arrastra para moverla`} label={label} onClick={onClick} onMove={onMove} days={diffDays(aa, bb) + 1} />); return; }
+    items.push(<div key={key} class={cls} style={style} title={tip} onClick={onClick}>{label}</div>);
   };
 
   let lastShift = null;
@@ -163,7 +241,7 @@ function TimelineView({ cal, filters, from, n, title, wide, onDay, onBar, onPick
         const ico = s.team === 'cocina' ? '🍳' : '🍽️';
         const label = wide ? `${ico} ${s.first_name} · ${formatRange(v.start, v.end)} (${len} días)` : months ? <span class="stick-bar">{tiny ? s.first_name.split(' ')[0] : <>{ico} {s.first_name} · {formatRange(v.start, v.end)} ({len} días)</>}</span> : `${ico} ${s.first_name} · ${len}d`;
         bar(`v${v.id}`, r, v.start, v.end, `g-bar ${colorClass(s.team, s.shift)} ${previewIds?.has(v.id) ? 'preview' : ''} ${onBar ? '' : 'ro'}`,
-          label, `${s.name}: ${formatRange(v.start, v.end)} (${len} días)`, onBar ? (e) => { e.stopPropagation(); onBar(v); } : null);
+          label, `${s.name}: ${formatRange(v.start, v.end)} (${len} días)`, onBar ? (e) => { e?.stopPropagation?.(); onBar(v); } : null, v);
       }
     }
     const subs = cal.reinforcements.filter((x) => x.team === g.team && x.shift === g.shift && x.start <= last && x.end >= from);
@@ -186,7 +264,7 @@ function TimelineView({ cal, filters, from, n, title, wide, onDay, onBar, onPick
   if (!staff.length) return <div class="card empty">No hay trabajadores con estos filtros.</div>;
   return (
     <div class="stack">
-      {onPick && (!months || sel) && <div class="small muted">{fixedLength ? `Para añadir vacaciones, haz clic en el primer día en la fila del trabajador (se cogen ${fixedLength} días seguidos). Haz clic en una barra para editarla.` : sel ? `Primer día: ${formatDate(sel.date)}. Ahora haz clic en el último día del periodo en la misma fila.` : 'Para añadir vacaciones, haz clic en el primer y el último día en la fila del trabajador. Haz clic en una barra para editarla.'}</div>}
+      {onPick && (!months || sel) && <div class="small muted">{fixedLength ? `Para añadir vacaciones, haz clic en el primer día en la fila del trabajador (se cogen ${fixedLength} días seguidos). Haz clic en una barra para editarla o arrástrala para moverla.` : sel ? `Primer día: ${formatDate(sel.date)}. Ahora haz clic en el último día del periodo en la misma fila.` : 'Para añadir vacaciones, haz clic en el primer y el último día en la fila del trabajador. Haz clic en una barra para editarla o arrástrala para moverla.'}</div>}
       <div class={`gantt-wrap ${fit?.tiny ? 'snap' : ''}`} ref={wrapRef} onScroll={onScroll} style={fit?.tiny ? { scrollPaddingLeft: `${nameCol}px` } : undefined}><div class={`gantt ${wide ? 'wide' : ''} ${months ? 'months' : ''} ${tiny ? 'tiny' : ''}`} data-rows={row} style={{ gridTemplateColumns: cols, ...(fit ? { '--colw': `${fit.colW}px`, '--rowh': `${fit.rowH}px`, '--namew': `${nameCol}px` } : {}) }}>{items}</div></div>
     </div>
   );

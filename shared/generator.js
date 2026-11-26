@@ -309,7 +309,10 @@ export function generateRotation(ctx, opts = {}) {
   const teamOcc = {};
   for (const p of Object.values(pools)) teamOcc[p.team] ||= new Array(N).fill(0);
   const fixedDays = new Map();
-  const mark = (s, a, b) => { const p = pools[poolKeyOf(s)]; for (let i = Math.max(0, a); i <= Math.min(N - 1, b); i++) { p.occ[i] = 1; teamOcc[s.team][i] = 1; } };
+  // Máximo por turno con cocina y sala juntas: días ocupados por turno.
+  const maxAll = ctx.maxOffPerShiftAll == null || ctx.maxOffPerShiftAll === '' ? null : Number(ctx.maxOffPerShiftAll);
+  const shiftOcc = { M: new Array(N).fill(0), T: new Array(N).fill(0) };
+  const mark = (s, a, b) => { const p = pools[poolKeyOf(s)]; for (let i = Math.max(0, a); i <= Math.min(N - 1, b); i++) { p.occ[i] = 1; teamOcc[s.team][i] = 1; if (shiftOcc[s.shift]) shiftOcc[s.shift][i]++; } };
   for (const v of fixed) {
     const s = byId.get(v.worker_id);
     if (!s) continue;
@@ -318,14 +321,23 @@ export function generateRotation(ctx, opts = {}) {
     fixedDays.set(s.worker_id, (fixedDays.get(s.worker_id) || 0) + Math.min(N - 1, b) - Math.max(0, a) + 1);
   }
   const cross = (team, a) => { let c = 0; for (let i = a; i < a + L; i++) for (const t in teamOcc) if (t !== team && teamOcc[t][i]) { c++; break; } return c; };
-  const hardFree = (p, a) => { if (a < s0 || a + L > N) return false; for (let i = a; i < a + L; i++) if (blocked[i] || p.occ[i]) return false; return true; };
+  const hardFree = (p, a, m) => {
+    if (a < s0 || a + L > N) return false;
+    for (let i = a; i < a + L; i++) {
+      if (blocked[i] || p.occ[i]) return false;
+      if (maxAll != null && m && shiftOcc[m.shift] && shiftOcc[m.shift][i] >= maxAll) return false;
+    }
+    return true;
+  };
   const put = (s, a) => { vacations.push({ worker_id: s.worker_id, start: dateFromIndex(year, a), end: dateFromIndex(year, a + L - 1) }); mark(s, a, a + L - 1); };
 
   const queues = Object.values(pools).map((p) => {
     const wanted = opts.order?.[p.key] || (wholeTeams.has(p.key) ? Object.keys(opts.order || {}).filter((k) => k.startsWith(`${p.key}-`)).flatMap((k) => opts.order[k]) : []);
     const ordered = [...p.members].sort((x, y) => {
       const ia = wanted.indexOf(x.worker_id), ib = wanted.indexOf(y.worker_id);
-      return (ia < 0 ? 999 : ia) - (ib < 0 ? 999 : ib) || x.name.localeCompare(y.name);
+      // Con máximo por turno para cocina y sala juntas, los del mismo turno van seguidos:
+      // así quedan tramos largos de un turno en los que puede ir alguien del otro equipo y del otro turno.
+      return (ia < 0 ? 999 : ia) - (ib < 0 ? 999 : ib) || (maxAll != null && !wanted.length ? x.shift.localeCompare(y.shift) : 0) || x.name.localeCompare(y.name);
     });
     const left = new Map(ordered.map((m) => [m.worker_id, Math.floor(Math.max(0, (m.days ?? 30) - (fixedDays.get(m.worker_id) || 0)) / L)]));
     const queue = [];
@@ -338,11 +350,11 @@ export function generateRotation(ctx, opts = {}) {
       // El grupo más grande va seguido, uno detrás de otro. Primero se intenta sin pisar los
       // días en que otro equipo ya está de vacaciones; si no cabe, se permite.
       const chainOf = (soft) => {
-        const ok = (a) => hardFree(pool, a) && (!soft || cross(pool.team, a) === 0);
+        const ok = (a, m) => hardFree(pool, a, m) && (!soft || cross(pool.team, a) === 0);
         const out = [];
         let c = s0;
         for (let k = 0; k < queue.length; k++) {
-          while (c + L <= N && !ok(c)) c++;
+          while (c + L <= N && !ok(c, queue[k])) c++;
           if (c + L > N) return null;
           out.push(c); c += L;
         }
@@ -357,7 +369,7 @@ export function generateRotation(ctx, opts = {}) {
         let first = out.length - 1;
         while (first > 0 && out[first - 1] + L === out[first]) first--;
         let shift = 0;
-        while (last + shift + 1 + L <= N && ch.ok(last + shift + 1) && hardFreeRange(out[first] + shift + 1, last + shift + L)) shift++;
+        while (last + shift + 1 + L <= N && ch.ok(last + shift + 1, queue[out.length - 1]) && hardFreeRange(out[first] + shift + 1, last + shift + L)) shift++;
         if (shift && first > 0) for (let k = first; k < out.length; k++) out[k] += shift;
         out.forEach((a, k) => put(queue[k], a));
         return;
@@ -367,7 +379,7 @@ export function generateRotation(ctx, opts = {}) {
     for (const m of queue) {
       let best = -1, bestCost = Infinity;
       for (let a = s0; a + L <= N; a++) {
-        if (!hardFree(pool, a)) continue;
+        if (!hardFree(pool, a, m)) continue;
         const cost = cross(pool.team, a) * 1000 + a;
         if (cost < bestCost) { bestCost = cost; best = a; }
       }
