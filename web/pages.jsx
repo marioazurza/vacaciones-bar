@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'preact/hooks';
 import { api, runtime } from './api.js';
-import { Modal, Alert, Field, Stat, StatusBadge, GroupDot, Legend, ShiftTag, run, toast, ask } from './ui.jsx';
+import { Modal, Alert, Field, Stat, StatusBadge, GroupDot, ShiftTag, run, toast, ask } from './ui.jsx';
 import { YearView, MonthView, WeekView, DayModal, Filters, weekStart } from './calendar.jsx';
 import { VacationModal, ChangeRequestModal, SwapModal, PreferenceModal } from './editors.jsx';
 import { buildCal, liveCheck, nameFn, statsFor } from './model.js';
@@ -52,7 +52,6 @@ export function CalendarPage({ data, reload, isAdmin, me }) {
       )}
       <div class="row cal-tools">
         <Filters staff={data.staff} value={filters} onChange={setFilters} />
-        <Legend conflicts={issues.length > 0} />
       </div>
       {view === 'year' && <YearView cal={cal} filters={filters} onDay={setDay} onMonth={goMonth} />}
       {view === 'month' && <MonthView cal={cal} filters={filters} month={m} onMonth={setM} onDay={setDay}
