@@ -50,7 +50,7 @@ function Login({ onLogin }) {
     <div class="login">
       {/* Sin <form> nativo: algunos visores incrustados bloquean el envío de formularios. */}
       <div class="card stack" onKeyDown={(e) => { if (e.key === 'Enter' && e.target.tagName === 'INPUT') submit(e); }}>
-        <div class="brand" style="padding:0"><div class="brand-logo">🌴</div><div>Vacaciones del bar<div class="small muted" style="font-weight:400">Calendario del equipo</div></div></div>
+        <div class="brand" style="padding:0"><div class="brand-logo">🌴</div><div>Calendario de vacaciones</div></div>
         {asAdmin ? <>
           {runtime.emailLogin && <b>Entrar como administrador</b>}
           {!runtime.emailLogin && <Field label="Usuario"><input class="input" autoComplete="username" autoCapitalize="none" autoCorrect="off" spellcheck={false} value={u} onInput={(e) => setU(e.currentTarget.value)} autoFocus /></Field>}

@@ -20,7 +20,7 @@ const html = (body, head = '') => `<!doctype html>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="theme-color" content="#2f6fed">
-<title>Vacaciones del bar</title>
+<title>Calendario de vacaciones</title>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🌴</text></svg>">
 ${head}
 </head>
@@ -48,7 +48,7 @@ const js = readFileSync('dist-demo/tmp/demo.js', 'utf8').replace(/<\/script/gi, 
 const css = readFileSync('dist-demo/tmp/demo.css', 'utf8');
 writeFileSync('dist-demo/vacaciones-demo.html', html(`<script>${js}</script>`, `<style>${css}</style>`));
 // Variante para publicar como página de claude.ai (sin esqueleto html/head/body propio)
-writeFileSync('dist-demo/artifact.html', `<title>Vacaciones del bar</title>\n<style>${css}</style>\n<div id="app"></div>\n<script>${js}</script>\n`);
+writeFileSync('dist-demo/artifact.html', `<title>Calendario de vacaciones</title>\n<style>${css}</style>\n<div id="app"></div>\n<script>${js}</script>\n`);
 rmSync('dist-demo/tmp', { recursive: true, force: true });
 console.log('Compilado: dist/ y dist-demo/vacaciones-demo.html');
 
